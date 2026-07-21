@@ -32,7 +32,7 @@ ESM does not resolve extensionless paths. This is the number one "worked in CJS,
 ## Setup
 
 ```bash
-git clone https://github.com/<your-username>/swiftcare-backend.git
+git clone https://github.com/ahbiggie/swiftcare-backend.git
 cd swiftcare-backend
 npm install
 cp .env.example .env     # then edit DB_USER / DB_PASSWORD to match your local Postgres
