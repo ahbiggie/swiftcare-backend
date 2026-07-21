@@ -6,6 +6,8 @@ Clinic management API — patient registration, queue, consultations, billing.
 
 The API surface is defined in **[docs/API_CONTRACT.md](docs/API_CONTRACT.md)**, which is **locked**. Read it before writing a handler. Any shape change lands there first, via PR, and only then in code.
 
+Why the code is shaped the way it is — trade-offs, rejected alternatives, and open questions — is in **[docs/DECISIONS.md](docs/DECISIONS.md)**. Read it before changing anything in the scaffold that looks wrong; several things that look like oversights are load-bearing.
+
 ---
 
 ## Two rules that will bite you
