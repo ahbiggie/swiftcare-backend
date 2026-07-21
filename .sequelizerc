@@ -1,0 +1,11 @@
+// CommonJS on purpose. sequelize-cli loads this file with require(), so ESM
+// syntax (import / export default) throws a SyntaxError before the CLI starts.
+// See README, rule 1.
+const path = require('path');
+
+module.exports = {
+  config: path.resolve('src/config', 'config.cjs'),
+  'models-path': path.resolve('src', 'models'),
+  'migrations-path': path.resolve('src', 'migrations'),
+  'seeders-path': path.resolve('src', 'seeders'),
+};
