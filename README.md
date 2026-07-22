@@ -53,13 +53,13 @@ On Windows, `createdb` requires the PostgreSQL `bin` directory on your `PATH`. I
 
 ### Scripts
 
-| Script | Does |
-| --- | --- |
-| `npm run dev` | Start with nodemon (reloads on save) |
-| `npm start` | Start once |
-| `npm run migrate` | Run pending migrations |
-| `npm run migrate:undo` | Roll back the last migration |
-| `npm run seed` | Run all seeders |
+| Script                 | Does                                 |
+| ---------------------- | ------------------------------------ |
+| `npm run dev`          | Start with nodemon (reloads on save) |
+| `npm start`            | Start once                           |
+| `npm run migrate`      | Run pending migrations               |
+| `npm run migrate:undo` | Roll back the last migration         |
+| `npm run seed`         | Run all seeders                      |
 
 ---
 
@@ -85,13 +85,13 @@ src/
 
 Four lanes build in parallel against one contract. These five pieces are single-source; a second copy is a bug, not a convenience.
 
-| File | Why it's shared |
-| --- | --- |
-| `constants/index.js` | Enum drift breaks the queue state machine silently |
-| `middlewares/auth.js` | The one place the JWT is read |
-| `middlewares/authorize.js` | The one role gate — don't re-implement per lane |
-| `utils/phone.js` | Load-bearing: there is no DB uniqueness backstop on patient identity |
-| `utils/response.js` | Every response uses the contract envelope |
+| File                       | Why it's shared                                                      |
+| -------------------------- | -------------------------------------------------------------------- |
+| `constants/index.js`       | Enum drift breaks the queue state machine silently                   |
+| `middlewares/auth.js`      | The one place the JWT is read                                        |
+| `middlewares/authorize.js` | The one role gate — don't re-implement per lane                      |
+| `utils/phone.js`           | Load-bearing: there is no DB uniqueness backstop on patient identity |
+| `utils/response.js`        | Every response uses the contract envelope                            |
 
 ## Adding a resource
 
@@ -107,12 +107,12 @@ Throw `ApiError` with a code from `constants/index.js`; `errorHandler` converts 
 
 ## Lane ownership
 
-| Area | Owner |
-| --- | --- |
-| Auth & accounts · Queue + state machine | Lane 1 — Shaibu |
-| Patients · Appointments & check-in | Lane 2 — Victor |
-| Vitals · Consultations & prescriptions | Lane 3 — Emmanuel Alliu |
-| Billing & payments · Dashboard & audit | Lane 4 — Emmanuel Dosumu |
+| Area                                    | Owner                    |
+| --------------------------------------- | ------------------------ |
+| Auth & accounts · Queue + state machine | Lane 1 — Shaibu          |
+| Patients · Appointments & check-in      | Lane 2 — Victor          |
+| Vitals · Consultations & prescriptions  | Lane 3 — Emmanuel Alliu  |
+| Billing & payments · Dashboard & audit  | Lane 4 — Emmanuel Dosumu |
 
 The queue state machine is Lane 1's, but every lane calls it. Coordinate before changing `services/queue/transitions.js`.
 

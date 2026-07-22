@@ -1,6 +1,6 @@
 # SwiftCare Backend — API Route Contract
 
-**Version:** v1 · **Status:** 🔒 LOCKED
+**Version:** v1 · **Status:** LOCKED
 
 This is the single specification that all four backend lanes, the frontend, and mobile build against. The architecture is closed; the remaining work is implementation.
 
@@ -166,7 +166,7 @@ Violations return `409 QUEUE_ILLEGAL_TRANSITION` or `403 FORBIDDEN_ROLE`.
 
 ## Duplicate patient handling
 
-> 🔒 **LOCKED.** This is an application-level workflow, not a database uniqueness rule.
+> **LOCKED.** This is an application-level workflow, not a database uniqueness rule.
 
 No natural key uniquely identifies a person — twins, Jr./Sr., shared household phones, and spelling variants all break it. So the database enforces objective facts only, and v1 carries **no uniqueness constraint on patient identity**.
 
