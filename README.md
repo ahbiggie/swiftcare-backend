@@ -45,7 +45,7 @@ npm run dev
 Verify:
 
 ```bash
-curl http://localhost:4000/api/health
+curl http://localhost:3000/api/health
 # {"success":true,"data":{"status":"ok"}}
 ```
 
