@@ -2,7 +2,7 @@
 
 Why the repo looks the way it does. One entry per decision that wasn't obvious, with the trade-off taken and what would justify revisiting it.
 
-The locked API surface lives in [API_CONTRACT.md](API_CONTRACT.md) — this file records **implementation** decisions, not contract ones. A change here is a PR. A change to the contract is a PR *there*, first.
+The locked API surface lives in [API_CONTRACT.md](API_CONTRACT.md) — this file records **implementation** decisions, not contract ones. A change here is a PR. A change to the contract is a PR _there_, first.
 
 **Started:** 2026-07-21 · **Phase:** foundation, pre-lane-work
 
@@ -57,7 +57,7 @@ Cost to keep in mind: a leaked credential in a public repo is scraped within min
 
 Both rules are the first thing in the README, in bold, because they fail confusingly rather than loudly.
 
-### M2 — `.sequelizerc` must be CommonJS *(fixed a real defect)*
+### M2 — `.sequelizerc` must be CommonJS _(fixed a real defect)_
 
 The original scaffold wrote `.sequelizerc` with `import path from 'path'` and `export default`.
 
@@ -69,7 +69,7 @@ This is the single best argument for rule 1 being bold in the README: the cost o
 
 `sequelize-cli migration:generate` emits a `.js` file containing `module.exports`, which conflicts with `"type": "module"`.
 
-**Measured, not assumed:** on Node 22 this *silently works* — Node's automatic syntax detection sees CJS syntax and loads it as CommonJS despite the package type. On older Node it throws `ReferenceError: module is not defined`.
+**Measured, not assumed:** on Node 22 this _silently works_ — Node's automatic syntax detection sees CJS syntax and loads it as CommonJS despite the package type. On older Node it throws `ReferenceError: module is not defined`.
 
 **Chose:** rename every generated migration to `.cjs`. The CLI's own discovery pattern is `/^(?!.*\.d\.ts$).*\.(cjs|js|cts|ts)$/`, so `.cjs` is found natively — verified by reading the CLI source, not inferred.
 
@@ -77,7 +77,7 @@ This is the single best argument for rule 1 being bold in the README: the cost o
 
 ### M4 — Relative imports always carry the `.js` extension
 
-Not a choice so much as a constraint ESM imposes, but recorded because it's the most common porting bug and it fails at *runtime* — meaning a missing extension on a rarely-hit route survives review and breaks in demo.
+Not a choice so much as a constraint ESM imposes, but recorded because it's the most common porting bug and it fails at _runtime_ — meaning a missing extension on a rarely-hit route survives review and breaks in demo.
 
 ---
 
@@ -91,13 +91,13 @@ The conventional `models/index.js` reads the models directory with `fs.readdirSy
 
 **Trade-off:** every new model must be added in two places, and forgetting one produces a confusing "model not registered" failure at association time. Accepted because the alternatives — top-level `await import()` in a loop, or a build step — are more machinery than a ten-model project needs. The file has a comment marking both insertion points.
 
-### D2 — `Patient.associate` commented out *(fixed a real defect)*
+### D2 — `Patient.associate` commented out _(fixed a real defect)_
 
 The scaffold's `Patient.associate` called `Patient.belongsTo(db.Clinic, ...)`, but no `Clinic` model exists yet and `models/index.js` runs every `associate` at import time.
 
 **Failure mode:** the server crashes on `npm run dev` — before anyone writes a line of lane code. First-run experience for three teammates would have been an unexplained boot failure in code they didn't write.
 
-**Chose:** comment the association with a TODO naming the exact unblocking condition (`clinic.js` exists *and* is registered). The `associate` hook itself stays, so the pattern to copy is still visible.
+**Chose:** comment the association with a TODO naming the exact unblocking condition (`clinic.js` exists _and_ is registered). The `associate` hook itself stays, so the pattern to copy is still visible.
 
 ### D3 — No uniqueness constraint on patient identity
 
@@ -183,22 +183,23 @@ Committed after seeing git's CRLF warnings on a Windows machine. Mixed-OS teams 
 
 Nothing below is inferred from reading the code — each was executed against the running app on 2026-07-21, Node 22.22.0.
 
-| Check | Result |
-| --- | --- |
-| `npm install` | 269 packages, clean; `bcrypt` native build succeeded |
-| `GET /api/health` | `200 {"success":true,"data":{"status":"ok"}}` |
-| No token | `401 UNAUTHENTICATED` |
-| Malformed token | `401 UNAUTHENTICATED` |
-| Nurse → `POST /patients` | `403 FORBIDDEN_ROLE` |
-| Receptionist → `POST /patients` | `501 NOT_IMPLEMENTED` (stub reached — gate passes the right role) |
-| `normalizePhone` × 4 formats | `+234 803…`, `234803…`, `0803…`, `803…` → all `08031234567` |
-| `assertCanTransition` | throws `501 NOT_IMPLEMENTED` as intended |
-| `sequelize-cli` + `.sequelizerc` | loads `config.cjs`, writes to `src/migrations/` |
+| Check                             | Result                                                                                                        |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `npm install`                     | 269 packages, clean; `bcrypt` native build succeeded                                                          |
+| `GET /api/health`                 | `200 {"success":true,"data":{"status":"ok"}}`                                                                 |
+| No token                          | `401 UNAUTHENTICATED`                                                                                         |
+| Malformed token                   | `401 UNAUTHENTICATED`                                                                                         |
+| Nurse → `POST /patients`          | `403 FORBIDDEN_ROLE`                                                                                          |
+| Receptionist → `POST /patients`   | `501 NOT_IMPLEMENTED` (stub reached — gate passes the right role)                                             |
+| `normalizePhone` × 4 formats      | `+234 803…`, `234803…`, `0803…`, `803…` → all `08031234567`                                                   |
+| `assertCanTransition`             | throws `501 NOT_IMPLEMENTED` as intended                                                                      |
+| `sequelize-cli` + `.sequelizerc`  | loads `config.cjs`, writes to `src/migrations/`                                                               |
 | ESM `.sequelizerc` (control test) | CLI silently prints help, runs nothing — confirms [M2](#m2--sequelizerc-must-be-commonjs-fixed-a-real-defect) |
-| Remote file tree after push | 27 files; **no `.env`, no `node_modules`** |
-| Branch protection | read back from the API, all seven settings as intended |
+| Remote file tree after push       | 27 files; **no `.env`, no `node_modules`**                                                                    |
+| Branch protection                 | read back from the API, all seven settings as intended                                                        |
+| Live database verification        | `sequelize.authenticate()` successfully connects and the application boots as expected                        |
 
-The app layer was smoke-tested by importing `app.js` directly on a throwaway port, bypassing `server.js` — so no local PostgreSQL was required. **The database path is therefore unverified:** `sequelize.authenticate()`, the real boot, and any migration run have not been executed against a live database.
+The database connection has been verified: `sequelize.authenticate()` successfully connects to the local PostgreSQL database, and the application boots on the configured port.
 
 ---
 
@@ -230,13 +231,13 @@ Flagged during setup as worth settling before the first commit; the current sing
 
 Not oversights. Each is a conscious "not yet", with the trigger for revisiting.
 
-| Deferred | Why | Revisit when |
-| --- | --- | --- |
-| 9 of 10 models + first migration | Schema is the critical path and blocks all four lanes | **Next.** Highest priority. |
-| `assertCanTransition` implementation | Lane 1's work, not the scaffold's | Lane 1 starts |
-| Concurrent-duplicate lock (phone-scoped) | Post-MVP per the contract; residual duplicates handled administratively | Real concurrent load |
-| Tests | No framework installed; nothing to test while every handler is a stub | First real handler lands |
-| Linting | An `eslint-disable` comment already exists with no ESLint — mild inconsistency, accepted | Team agrees on a style |
-| CI | Nothing to run without tests | Tests exist |
-| `CONTRIBUTING.md` + PR template | Branch naming and PR expectations currently live only in the README | Before lanes branch |
-| Live database verification | No local PostgreSQL during setup | First migration run |
+| Deferred                                 | Why                                                                                       | Revisit when                                                                                                       |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| 9 of 10 models + first migration         | Schema is the critical path and blocks all four lanes                                     | **Next.** Highest priority.                                                                                        |
+| `assertCanTransition` implementation     | Lane 1's work, not the scaffold's                                                         | Lane 1 starts                                                                                                      |
+| Concurrent-duplicate lock (phone-scoped) | Post-MVP per the contract; residual duplicates handled administratively                   | Real concurrent load                                                                                               |
+| Tests                                    | No framework installed; nothing to test while every handler is a stub                     | First real handler lands                                                                                           |
+| Linting                                  | An `eslint-disable` comment already exists with no ESLint — mild inconsistency, accepted  | Team agrees on a style                                                                                             |
+| CI                                       | Nothing to run without tests                                                              | Tests exist                                                                                                        |
+| `CONTRIBUTING.md` + PR template          | Branch naming and PR expectations currently live only in the README                       | Before lanes branch                                                                                                |
+| CORS (Lane 1 / `app.js`)                 | Not in `app.js` today; documenting unbuilt behavior would violate this doc's own standard | **Before frontend calls the API from a browser.** Then it earns a line in the contract's Conventions — not before. |

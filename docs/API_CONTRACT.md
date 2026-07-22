@@ -13,6 +13,10 @@ This is the single specification that all four backend lanes, the frontend, and 
 
 ## Table of contents
 
+- [Getting started](#getting-started)
+  - [Base URL](#base-url)
+  - [Authentication flow](#authentication-flow)
+  - [Worked example — a full patient journey](#worked-example--a-full-patient-journey)
 - [Conventions](#conventions)
 - [Shared enums](#shared-enums)
 - [Error code catalog](#error-code-catalog)
@@ -28,6 +32,215 @@ This is the single specification that all four backend lanes, the frontend, and 
   - [6. Consultations & prescriptions](#6-consultations--prescriptions--lane-3-emmanuel-alliu)
   - [7. Billing & payments](#7-billing--payments--lane-4-emmanuel-dosumu)
   - [8. Dashboard & admin](#8-dashboard--admin--lane-4-emmanuel-dosumu)
+
+---
+
+## Getting started
+
+New to this API? Read this section top to bottom, then use the route sections below as reference. Everything here is traceable to a file in the repo or a section further down.
+
+### Base URL
+
+Local development server:
+
+```
+http://localhost:3000/api
+```
+
+- **Port `3000`** comes from `PORT` in `.env.example`. If you override `PORT` in your own `.env`, substitute it.
+- **Prefix `/api`** comes from `app.use('/api', routes)` in `src/app.js`. Every route in this contract is mounted under it.
+
+**The rule:** take any `METHOD /path` from the route sections below and prepend the base URL.
+
+> `POST /auth/login` (section 1)  →  `POST http://localhost:3000/api/auth/login`
+
+### Authentication flow
+
+Every route needs a token except the three public ones ([Authentication](#authentication)). If you've never used a JWT, follow these four steps and you'll be able to call a protected endpoint.
+
+1. **Get a token — pick one of three, depending on who you are:**
+   - `POST /auth/clinic/signup` — you're setting up a brand-new clinic; this creates the first `admin`. (Section 1)
+   - `POST /auth/login` — you already have an account. (Section 1)
+   - `POST /auth/accept-invite` — you were invited and are setting your password for the first time. (Section 1)
+
+   Each returns a response whose `data` contains a `token` — a long opaque string.
+
+2. **Store the token.** Keep the `data.token` string on the client.
+   You don't decode it or read anything out of it — the server does that.
+
+3. **Attach it to every subsequent request** as a header, exactly this shape (from [Conventions → Authentication](#authentication)):
+
+   ```
+   Authorization: Bearer <token>
+   ```
+
+4. **When it's missing, malformed, or expired**, the server replies `401 UNAUTHENTICATED` (from the [error catalog](#error-code-catalog)). There's no refresh endpoint in v1 — get a fresh token by calling `POST /auth/login` again.
+
+### Worked example — a full patient journey
+
+One happy path, front to back: **register a patient => check them in =>  record vitals => run and complete a consultation => take payment.**
+
+Every field name below is lifted verbatim from the route sections (2, 3, 5, 6, 7). If an example and a route section ever disagree, the route section wins and the example is the bug. IDs chain forward — each response hands you the ID the next request needs.
+
+All calls need `Authorization: Bearer <token>` (see above). The header is shown once, then omitted for brevity.
+
+**1 — Register the patient** · `POST /patients` (section 2)
+
+```http
+POST http://localhost:3000/api/patients
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "firstName": "Ada",
+  "lastName": "Okafor",
+  "phone": "08031234567",
+  "gender": "female",
+  "dob": "1990-04-12"
+}
+```
+
+```json
+// 201 Created
+{
+  "success": true,
+  "data": {
+    "id": "pat_3f2a…",   //  this is the patientId used everywhere below
+    "firstName": "Ada",
+    "lastName": "Okafor",
+    "phone": "08031234567",
+    "gender": "female",
+    "dob": "1990-04-12"
+  }
+}
+```
+
+**2 — Check the patient in** · `POST /queue/check-in` (section 3)
+
+`assignedDoctorId` is a doctor's `id` from `GET /staff/doctors` (section 1). `appointmentId` is optional and omitted here.
+
+```json
+{
+  "patientId": "pat_3f2a…",        // from step 1
+  "assignedDoctorId": "usr_doc_77…"
+}
+```
+
+```json
+// 201 Created
+{
+  "success": true,
+  "data": {
+    "queueId": "q_9b8c…",   // the visit — see note below
+    "status": "Checked-In"
+  }
+}
+```
+
+**3 — Record vitals** · `POST /vitals` (section 5) · role: `nurse`
+
+```jsonc
+{
+  "queueEntryId": "q_9b8c…",   // the queueId from step 2 (see note above)
+  "patientId": "pat_3f2a…",    // from step 1
+  "bpSystolic": 120,
+  "bpDiastolic": 80,
+  "temperature": 36.8,
+  "weight": 72
+}
+```
+
+```jsonc
+// 201 Created
+{
+  "success": true,
+  "data": {
+    "queueEntryId": "q_9b8c…",
+    "patientId": "pat_3f2a…",
+    "bpSystolic": 120,
+    "bpDiastolic": 80,
+    "temperature": 36.8,
+    "weight": 72,
+    "recordedBy": "usr_nurse_12…",
+    "recordedAt": "2026-07-22T09:15:00Z"
+  }
+}
+```
+
+**4 — Run the consultation** · `POST /consultations` then `POST /consultations/:id/complete` (section 6) · role: `doctor`
+
+Completing needs a consultation `id`, so start one first:
+
+```json
+// POST http://localhost:3000/api/consultations
+{
+  "queueEntryId": "q_9b8c…",   // same visit
+  "patientId": "pat_3f2a…"
+}
+```
+
+```json
+// 201 Created
+{
+  "success": true,
+  "data": {
+    "id": "cons_5d4e…",   // the :id for the complete call
+    "queueEntryId": "q_9b8c…",
+    "patientId": "pat_3f2a…",
+    "status": "in_progress"
+  }
+}
+```
+
+Then complete it — this one call writes notes + diagnosis + prescriptions, creates the invoice, and advances the queue to `Awaiting Payment`, all in one transaction:
+
+```json
+// POST http://localhost:3000/api/consultations/cons_5d4e…/complete
+{
+  "notes": "Mild fever, advised rest and fluids.",
+  "diagnosis": "Viral upper respiratory infection",
+  "prescriptions": [
+    { "drugName": "Paracetamol", "dosage": "500mg", "frequency": "twice daily", "duration": "5 days" }
+  ]
+}
+```
+
+```json
+// 200 OK
+{
+  "success": true,
+  "data": {
+    "consultation": { "id": "cons_5d4e…", "status": "Completed" },
+    "invoice": { "id": "inv_1a2b…", "status": "Pending" },   // invoiceId for step 5
+    "queueStatus": "Awaiting Payment"
+  }
+}
+```
+
+**5 — Take payment** · `POST /payments` (section 7) · role: `cashier`
+
+No `amount` in the body — the backend reads the invoice total. This closes the visit to `Completed`.
+
+```json
+{
+  "invoiceId": "inv_1a2b…",   // from step 4's complete response
+  "method": "cash"
+}
+```
+
+```json
+// 200 OK
+{
+  "success": true,
+  "data": {
+    "payment": { "id": "pay_8c7d…" },
+    "receipt": { },            // data, not a PDF
+    "queueStatus": "Completed"
+  }
+}
+```
+
+**Advancing the queue between steps.** The clinical spine above is gated by the [queue rulebook](#queue-rulebook): a visit only reaches a doctor after a nurse moves it `Checked-In => Triage Ready => Awaiting Doctor`, and the doctor moves it `Awaiting Doctor => In Consultation` before `POST /consultations`. Those moves go through `POST /queue/:queueId/status` (section 4). The last two transitions are automatic — consult-complete moves the visit to `Awaiting Payment`, and payment moves it to `Completed` — so you don't call the status endpoint for those.
 
 ---
 
@@ -61,7 +274,7 @@ Every request is auto-scoped to the token's `clinicId`. No cross-clinic access.
 
 ### Response envelope
 
-```jsonc
+```json
 // Success
 { "success": true, "data": {} }
 
@@ -136,7 +349,9 @@ Backed by a single `constants.js`.
 
 ## Resource ownership
 
-| Resource | Owner |
+Questions about a specific area of the API? Contact the person listed — this is a directory of who to ask, not an internal work-assignment chart.
+
+| Resource | Contact |
 | --- | --- |
 | Auth & accounts (incl. `GET /staff/doctors`) | Lane 1 — Shaibu |
 | Queue + state machine (shared; called by every lane) | Lane 1 — Shaibu |
