@@ -1,6 +1,6 @@
 # SwiftCare Backend — API Route Contract
 
-**Version:** v1 · **Status:** LOCKED
+**Version:** v1.0.0
 
 This is the single specification that all four backend lanes, the frontend, and mobile build against. The architecture is closed; the remaining work is implementation.
 
@@ -44,15 +44,15 @@ New to this API? Read this section top to bottom, then use the route sections be
 Local development server:
 
 ```
-http://localhost:3000/api
+http://localhost:4000/api
 ```
 
-- **Port `3000`** comes from `PORT` in `.env.example`. If you override `PORT` in your own `.env`, substitute it.
+- **Port `4000`** comes from `PORT` in `.env.example`. If you override `PORT` in your own `.env`, substitute it.
 - **Prefix `/api`** comes from `app.use('/api', routes)` in `src/app.js`. Every route in this contract is mounted under it.
 
 **The rule:** take any `METHOD /path` from the route sections below and prepend the base URL.
 
-> `POST /auth/login` (section 1)  →  `POST http://localhost:3000/api/auth/login`
+> `POST /auth/login` (section 1)  →  `POST http://localhost:4000/api/auth/login`
 
 ### Authentication flow
 
@@ -78,16 +78,16 @@ Every route needs a token except the three public ones ([Authentication](#authen
 
 ### Worked example — a full patient journey
 
-One happy path, front to back: **register a patient => check them in =>  record vitals => run and complete a consultation => take payment.**
+One happy path, front to back: **register a patient → check them in → record vitals → advance the queue → run and complete a consultation → take payment.**
 
-Every field name below is lifted verbatim from the route sections (2, 3, 5, 6, 7). If an example and a route section ever disagree, the route section wins and the example is the bug. IDs chain forward — each response hands you the ID the next request needs.
+Every field name below is lifted verbatim from the route sections (2, 3, 4, 5, 6, 7). If an example and a route section ever disagree, the route section wins and the example is the bug. IDs chain forward — each response hands you the ID the next request needs. Every call below can be pasted in order and run — nothing is skipped or only described afterward.
 
 All calls need `Authorization: Bearer <token>` (see above). The header is shown once, then omitted for brevity.
 
-**1 — Register the patient** · `POST /patients` (section 2)
+**1 — Register the patient** · `POST /patients` (section 2) · role: `receptionist`
 
 ```http
-POST http://localhost:3000/api/patients
+POST http://localhost:4000/api/patients
 Authorization: Bearer <token>
 Content-Type: application/json
 
@@ -105,7 +105,7 @@ Content-Type: application/json
 {
   "success": true,
   "data": {
-    "id": "pat_3f2a…",   //  this is the patientId used everywhere below
+    "id": "pat_3f2a…",   // this is the patientId used everywhere below
     "firstName": "Ada",
     "lastName": "Okafor",
     "phone": "08031234567",
@@ -115,7 +115,7 @@ Content-Type: application/json
 }
 ```
 
-**2 — Check the patient in** · `POST /queue/check-in` (section 3)
+**2 — Check the patient in** · `POST /queue/check-in` (section 3) · role: `receptionist`
 
 `assignedDoctorId` is a doctor's `id` from `GET /staff/doctors` (section 1). `appointmentId` is optional and omitted here.
 
@@ -131,7 +131,7 @@ Content-Type: application/json
 {
   "success": true,
   "data": {
-    "queueId": "q_9b8c…",   // the visit — see note below
+    "queueId": "q_9b8c…",   // the visit — same value as queueEntryId below
     "status": "Checked-In"
   }
 }
@@ -141,7 +141,7 @@ Content-Type: application/json
 
 ```jsonc
 {
-  "queueEntryId": "q_9b8c…",   // the queueId from step 2 (see note above)
+  "queueEntryId": "q_9b8c…",   // the queueId from step 2
   "patientId": "pat_3f2a…",    // from step 1
   "bpSystolic": 120,
   "bpDiastolic": 80,
@@ -167,12 +167,57 @@ Content-Type: application/json
 }
 ```
 
-**4 — Run the consultation** · `POST /consultations` then `POST /consultations/:id/complete` (section 6) · role: `doctor`
+**4 — Nurse advances the queue: `Checked-In` → `Triage Ready`** · `POST /queue/:queueId/status` (section 4) · role: `nurse`
+
+```json
+// POST http://localhost:4000/api/queue/q_9b8c…/status
+{ "status": "Triage Ready" }
+```
+
+```json
+// 200 OK
+{
+  "success": true,
+  "data": { "queueId": "q_9b8c…", "status": "Triage Ready", "lastUpdatedBy": "usr_nurse_12…" }
+}
+```
+
+**5 — Nurse advances the queue: `Triage Ready` → `Awaiting Doctor`** · same endpoint · role: `nurse`
+
+```json
+{ "status": "Awaiting Doctor", "note": "Vitals recorded, ready for doctor" }
+```
+
+```json
+// 200 OK
+{
+  "success": true,
+  "data": { "queueId": "q_9b8c…", "status": "Awaiting Doctor", "lastUpdatedBy": "usr_nurse_12…" }
+}
+```
+
+**6 — Doctor advances the queue: `Awaiting Doctor` → `In Consultation`** · same endpoint · role: `doctor`
+
+```json
+{ "status": "In Consultation" }
+```
+
+```json
+// 200 OK
+{
+  "success": true,
+  "data": { "queueId": "q_9b8c…", "status": "In Consultation", "lastUpdatedBy": "usr_doc_77…" }
+}
+```
+
+This is the move that puts the visit in front of the doctor per the [queue rulebook](#queue-rulebook) — it's what `Awaiting Doctor` in step 6's *name* refers to, and it must happen before the consultation is started below.
+
+**7 — Run the consultation** · `POST /consultations` then `POST /consultations/:id/complete` (section 6) · role: `doctor`
 
 Completing needs a consultation `id`, so start one first:
 
 ```json
-// POST http://localhost:3000/api/consultations
+// POST http://localhost:4000/api/consultations
 {
   "queueEntryId": "q_9b8c…",   // same visit
   "patientId": "pat_3f2a…"
@@ -195,7 +240,7 @@ Completing needs a consultation `id`, so start one first:
 Then complete it — this one call writes notes + diagnosis + prescriptions, creates the invoice, and advances the queue to `Awaiting Payment`, all in one transaction:
 
 ```json
-// POST http://localhost:3000/api/consultations/cons_5d4e…/complete
+// POST http://localhost:4000/api/consultations/cons_5d4e…/complete
 {
   "notes": "Mild fever, advised rest and fluids.",
   "diagnosis": "Viral upper respiratory infection",
@@ -211,19 +256,17 @@ Then complete it — this one call writes notes + diagnosis + prescriptions, cre
   "success": true,
   "data": {
     "consultation": { "id": "cons_5d4e…", "status": "Completed" },
-    "invoice": { "id": "inv_1a2b…", "status": "Pending" },   // invoiceId for step 5
+    "invoice": { "id": "inv_1a2b…", "status": "Pending" },   // invoiceId for step 8
     "queueStatus": "Awaiting Payment"
   }
 }
 ```
 
-**5 — Take payment** · `POST /payments` (section 7) · role: `cashier`
-
-No `amount` in the body — the backend reads the invoice total. This closes the visit to `Completed`.
+**8 — Take payment** · `POST /payments` (section 7) · role: `cashier`
 
 ```json
 {
-  "invoiceId": "inv_1a2b…",   // from step 4's complete response
+  "invoiceId": "inv_1a2b…",   // from step 7's complete response
   "method": "cash"
 }
 ```
@@ -240,7 +283,7 @@ No `amount` in the body — the backend reads the invoice total. This closes the
 }
 ```
 
-**Advancing the queue between steps.** The clinical spine above is gated by the [queue rulebook](#queue-rulebook): a visit only reaches a doctor after a nurse moves it `Checked-In => Triage Ready => Awaiting Doctor`, and the doctor moves it `Awaiting Doctor => In Consultation` before `POST /consultations`. Those moves go through `POST /queue/:queueId/status` (section 4). The last two transitions are automatic — consult-complete moves the visit to `Awaiting Payment`, and payment moves it to `Completed` — so you don't call the status endpoint for those.
+**Recap.** Steps 4–6 are what the [queue rulebook](#queue-rulebook) requires before a doctor can act on a visit — skip them and step 7 is out of sequence with the state machine. The last two transitions, `Awaiting Payment` and `Completed`, are automatic side effects of steps 7 and 8 — there's no separate status call for either.
 
 ---
 
@@ -306,7 +349,7 @@ The database enforces objective facts only: unique `id`, unique `queueEntryId`, 
 
 ### Search
 
-- **Name** — partial and case-insensitive (`ILIKE`).
+- **Name** — partial and case-insensitive.
 - **Phone** — run through the shared normalizer before comparing. It lives in `utils` and is the same for all lanes.
 
 ### One active visit per patient
@@ -462,8 +505,8 @@ Body `{ firstName, lastName, phone, gender, dob, confirmNewPatient? }` → `201`
 | Method | Path | Priority | Access |
 | --- | --- | --- | --- |
 | `POST` | `/appointments` | MUST | `receptionist`, `admin` |
-| `PUT` | `/appointments/:id` | DEFER | Reschedule |
-| `DELETE` | `/appointments/:id` | DEFER | Cancel (soft delete) |
+| `PUT` | `/appointments/:id` | DEFER | `receptionist`, `admin` |
+| `DELETE` | `/appointments/:id` | DEFER | `receptionist`, `admin` |
 | `POST` | `/queue/check-in` | MUST | `receptionist`, `admin` |
 
 **`POST /appointments`**
