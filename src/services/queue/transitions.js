@@ -10,16 +10,31 @@ export const TRANSITIONS = [
 ];
 
 /**
- * TODO (Lane 1 / Shaibu):
- *   1. Admin override: role === Role.ADMIN -> allow any move.
- *   2. Legal move? find row where from === currentStatus && to === nextStatus;
- *      none -> throw new ApiError(409, ErrorCode.QUEUE_ILLEGAL_TRANSITION, '...').
- *   3. Role owns it? row.role !== callerRole -> throw new ApiError(403, ErrorCode.FORBIDDEN_ROLE, '...').
- *
- *   Concurrency guard belongs in the calling service, not here: re-read the queue
- *   row inside a transaction and compare currentStatus immediately before writing.
+ * Guard: returns silently when the move is allowed, throws ApiError when it isn't.
  */
-// eslint-disable-next-line no-unused-vars
 export function assertCanTransition(currentStatus, nextStatus, callerRole) {
-  throw new ApiError(501, 'NOT_IMPLEMENTED', 'assertCanTransition not built yet');
+  // Admin sits above the table instead of in it, so no lookup is needed.
+  if (callerRole === Role.ADMIN) return;
+
+  const transition = TRANSITIONS.find(
+    (t) => t.from === currentStatus && t.to === nextStatus,
+  );
+
+  // Checked before the role check: a move that isn't in the table is illegal for
+  // everyone, so reporting it as a role problem would misdescribe the failure.
+  if (!transition) {
+    throw new ApiError(
+      409,
+      ErrorCode.QUEUE_ILLEGAL_TRANSITION,
+      `Cannot move a visit from "${currentStatus}" to "${nextStatus}".`,
+    );
+  }
+
+  if (transition.role !== callerRole) {
+    throw new ApiError(
+      403,
+      ErrorCode.FORBIDDEN_ROLE,
+      `Moving a visit from "${currentStatus}" to "${nextStatus}" is reserved for the ${transition.role} role.`,
+    );
+  }
 }
