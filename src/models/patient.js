@@ -27,7 +27,7 @@ export default (sequelize) => {
     // TODO (Lane 1): uncomment once src/models/clinic.js lands and is registered
     // in models/index.js. Associating against a model that isn't in the registry
     // throws at boot.
-    // Patient.belongsTo(db.Clinic, { foreignKey: 'clinicId' });
+    Patient.belongsTo(db.Clinic, { foreignKey: 'clinicId' });
   };
 
   return Patient;

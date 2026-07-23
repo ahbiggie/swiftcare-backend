@@ -1,14 +1,13 @@
-// Explicit registry. The sequelize-cli auto-loader reads the models directory
-// with require() and does not translate cleanly to ESM, so each model is
-// imported and registered by hand. Add yours in both places below.
 import sequelize from '../config/database.js';
 import definePatient from './patient.js';
-// import defineClinic from './clinic.js';
+import defineClinic from './clinic.js';
+// import defineStaff from './staff.js';
 
 const Patient = definePatient(sequelize);
-// const Clinic = defineClinic(sequelize);
+const Clinic = defineClinic(sequelize);
+// const Staff = defineStaff(sequelize);
 
-const db = { Patient /* , Clinic */ };
+const db = { Patient, Clinic };
 
 Object.values(db).forEach((model) => {
   if (typeof model.associate === 'function') model.associate(db);
