@@ -40,7 +40,7 @@ export default (sequelize) => {
     };
     Clinic.associate = (db) => {
         Clinic.hasMany(db.Patient, { foreignKey: 'clinicId' })
-        Clinic.hasStaff(db.Staff, { foreignKey: 'clinicId' })
+        Clinic.hasMany(db.Staff, { foreignKey: 'clinicId' })
     };
     return Clinic;
 };
