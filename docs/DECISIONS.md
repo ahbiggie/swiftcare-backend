@@ -157,6 +157,18 @@ Adds `Checked-In → Cancelled` (role `receptionist`) to `TRANSITIONS`, makes `C
 
 **Note validation rejects blanks.** Empty string and whitespace-only count as missing (`note.trim().length > 0`) — a blank reason is no reason.
 
+### D9 — CORS: env-driven allow-list, rejection routed through `ApiError`
+
+The frontend now calls the API from a browser, which is the trigger the deferred CORS item named. Added the `cors` middleware in `app.js` with an origin allow-list read from `CORS_ORIGIN` (comma-separated, in `.env.example`), and `FORBIDDEN_ORIGIN` to the error catalog.
+
+**Allow-list is configuration, not code.** Origins live in `CORS_ORIGIN` and are parsed at boot (`split(',')`, trimmed, empties dropped), so dev/staging/prod differ by env alone — no code change to add a frontend host. Empty/unset `CORS_ORIGIN` means no browser origin is allowed, which fails closed.
+
+**Requests with no `Origin` header pass.** Server-to-server calls, curl, and health checks send no `Origin`, so they're allowed through — CORS is a *browser* enforcement, not an authentication layer, and must never stand in for the `Authorization` header. The role gate ([S2](#s2--one-role-gate)) and `auth` middleware remain the actual access control.
+
+**Rejection is an `ApiError(403, FORBIDDEN_ORIGIN)`, not a bare `Error`.** This is the whole reason the code exists: a plain `Error` from the origin callback falls through `errorHandler` to the generic `500 INTERNAL_ERROR` branch ([S3](#s3--errors-go-through-apierror--one-handler)) — the wrong status (a `403` access decision, not a server fault) and inconsistent with every other rejection in the API. Routing through `ApiError` renders the contract's error envelope with the right code. Verified end-to-end (allowed → 200, disallowed → 403 `FORBIDDEN_ORIGIN`, no-Origin → 200), and covered in `tests/cors.test.js`.
+
+**Now documented in the contract.** Per the deferred note, CORS earns a line in the contract's Conventions and `FORBIDDEN_ORIGIN` joins the error catalog — done here, not before.
+
 ---
 
 ## Shared code
@@ -276,4 +288,4 @@ Not oversights. Each is a conscious "not yet", with the trigger for revisiting.
 | Linting                                  | An `eslint-disable` comment already exists with no ESLint — mild inconsistency, accepted  | Team agrees on a style                                                                                             |
 | CI                                       | Nothing to run without tests                                                              | Tests exist                                                                                                        |
 | `CONTRIBUTING.md` + PR template          | Branch naming and PR expectations currently live only in the README                       | Before lanes branch                                                                                                |
-| CORS (Lane 1 / `app.js`)                 | Not in `app.js` today; documenting unbuilt behavior would violate this doc's own standard | **Before frontend calls the API from a browser.** Then it earns a line in the contract's Conventions — not before. |
+| CORS (Lane 1 / `app.js`)                 | ~~Not in `app.js` today~~ **Done — see [D9](#d9--cors-env-driven-allow-list-rejection-routed-through-apierror).** Env-driven allow-list, `403 FORBIDDEN_ORIGIN`, now in the contract's Conventions | — |
