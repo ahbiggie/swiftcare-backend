@@ -143,6 +143,20 @@ The `(clinicId, email)` index is still present, **non-unique**, to serve clinic-
 
 **Rationale:** same category as [S1](#s1--one-phone-normalizer-load-bearing) and [S2](#s2--one-role-gate). A second copy means raising the cost factor, or fixing a bug in the hook guards, silently applies to only one kind of account — and the account it misses is the one nobody tested. Added to the README's shared-code table so it's covered by the same "do not fork" rule.
 
+### D8 — Queue cancellation: a terminal status, note-required, admin-included
+
+Adds `Checked-In → Cancelled` (role `receptionist`) to `TRANSITIONS`, makes `Cancelled` a real `QueueStatus`, and requires a note on the move. Resolves [Q1](#q1--is-cancelled-a-queue-status).
+
+**`Cancelled` is a terminal queue status, not only an appointment status.** Q1 flagged the ambiguity: the contract calls an active visit "any status except `Completed`/`Cancelled`", yet `Cancelled` wasn't in the queue enum. Chosen reading: a visit *can* be abandoned mid-flow, so `Cancelled` joins the queue enum and stays **out** of `ACTIVE_QUEUE_STATUSES`. This is load-bearing for `409 QUEUE_ALREADY_CHECKED_IN` — a cancelled visit is closed, so the patient can check in again. The alternative (no cancel path) would strand a patient who abandoned a visit, unable to ever re-register.
+
+**The note is a validation requirement, not a permission one — and it's table-driven.** The rule lives on the row (`requiresNote: true`), not as an `if (nextStatus === CANCELLED)` in the function, so a second note-requiring transition would change only the table. A missing note is `400 VALIDATION_ERROR` — the move is legal and the role is right, so it's neither `409` nor `403`; it's a missing field. Order matters: legality → role → note, so a caller is never told their note is missing for a move that wasn't theirs to make.
+
+**The note requirement survives the admin override; the permission checks don't.** Admin's override is about *who may act*, so it skips the legality and role checks. A note is about *whether the reason gets recorded* — a different axis — so it is **not** skipped. The guard splits accordingly: the `isAdmin` bypass wraps only the two permission checks. This matters because the system is billing-adjacent (BR-006): an admin silently cancelling a visit that already has vitals or a consultation is exactly what an audit trail exists to catch.
+
+**The note check is keyed on the destination, not the matched row.** First cut asked "does the matched transition require a note", which left a hole: an admin cancelling from a state no row declares (`Awaiting Payment → Cancelled`) bypassed the table lookup entirely and so escaped the note. That undefined path is the one cancellation route with *no other guardrail*, so it's where the note matters most — the first cut had it backwards, guarding the ordinary path and freeing the powerful one. Fixed by asking "does any row into `nextStatus` require a note" (`TRANSITIONS.some(t => t.to === nextStatus && t.requiresNote)`) — still no status literal in the logic, just a different slice of the same data. Because every cancel-row carries `requiresNote`, it reads as "moving to Cancelled always needs a note, regardless of which row matched or whether one matched at all."
+
+**Note validation rejects blanks.** Empty string and whitespace-only count as missing (`note.trim().length > 0`) — a blank reason is no reason.
+
 ---
 
 ## Shared code
@@ -227,11 +241,13 @@ The database connection has been verified: `sequelize.authenticate()` successful
 
 Unresolved. Each needs an owner before the work it blocks starts.
 
-### Q1 — Is `Cancelled` a queue status?
+### Q1 — Is `Cancelled` a queue status? — **RESOLVED, see [D8](#d8--queue-cancellation-a-terminal-status-note-required-admin-included)**
 
 The contract defines an active visit as "any status except `Completed`/`Cancelled`", but `Cancelled` is not in the Queue Status enum — it only appears in Appointment Status. So either a queue entry can be cancelled and the enum is incomplete, or visits are never cancelled and the definition should say `Completed` only.
 
 `ACTIVE_QUEUE_STATUSES` currently assumes the latter. **This affects the `409 QUEUE_ALREADY_CHECKED_IN` check**: if a visit can be abandoned mid-flow with no cancel path, that patient can never check in again. Worth resolving before Lane 2 builds check-in.
+
+**Resolved:** `Cancelled` *is* a queue status. `Checked-In → Cancelled` is a real, note-required transition, and `Cancelled` is terminal (excluded from `ACTIVE_QUEUE_STATUSES`), so a cancelled visit frees the patient to check in again. See D8 for the full reasoning.
 
 ### Q2 — Queue state machine: imported module or internal HTTP call?
 
@@ -256,7 +272,7 @@ Not oversights. Each is a conscious "not yet", with the trigger for revisiting.
 | 9 of 10 models + first migration         | Schema is the critical path and blocks all four lanes                                     | **Next.** Highest priority.                                                                                        |
 | `assertCanTransition` implementation     | Lane 1's work, not the scaffold's                                                         | Lane 1 starts                                                                                                      |
 | Concurrent-duplicate lock (phone-scoped) | Post-MVP per the contract; residual duplicates handled administratively                   | Real concurrent load                                                                                               |
-| Tests                                    | No framework installed; nothing to test while every handler is a stub                     | First real handler lands                                                                                           |
+| Tests                                    | ~~No framework installed~~ **Started.** `node --test` (zero-dep) covers the queue transition guard in `tests/`. No framework beyond Node's built-in runner yet | Broaden past the queue guard when the first HTTP handler lands                     |
 | Linting                                  | An `eslint-disable` comment already exists with no ESLint — mild inconsistency, accepted  | Team agrees on a style                                                                                             |
 | CI                                       | Nothing to run without tests                                                              | Tests exist                                                                                                        |
 | `CONTRIBUTING.md` + PR template          | Branch naming and PR expectations currently live only in the README                       | Before lanes branch                                                                                                |

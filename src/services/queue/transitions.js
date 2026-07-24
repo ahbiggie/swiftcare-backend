@@ -10,7 +10,7 @@ export const TRANSITIONS = [
   { from: S.CHECKED_IN, to: S.CANCELLED, role: Role.RECEPTIONIST, requiresNote: true },
 ];
 
-// whitespace-only string is treated as missing a blank reason is no reason.
+// A blank reason is no reason: empty or whitespace-only counts as missing.
 const hasNote = (note) => typeof note === 'string' && note.trim().length > 0;
 
 export function assertCanTransition(currentStatus, nextStatus, callerRole, note) {
@@ -22,8 +22,10 @@ export function assertCanTransition(currentStatus, nextStatus, callerRole, note)
 
   // Existence and role are permission concerns, and admin overrides both — an
   // admin can make a move that isn't in the table at all, so for admin we skip
-
+  // straight past these two.
   if (!isAdmin) {
+    // Checked before role: a move absent from the table is illegal for everyone,
+    // so calling it a role problem would misdescribe the failure.
     if (!transition) {
       throw new ApiError(
         409,
@@ -32,7 +34,8 @@ export function assertCanTransition(currentStatus, nextStatus, callerRole, note)
       );
     }
 
-    // After existence, before the note check:  Role first.
+    // After existence, before the note check: naming a missing note for a move
+    // that was never this caller's to make would report the wrong failure.
     if (transition.role !== callerRole) {
       throw new ApiError(
         403,
@@ -42,7 +45,14 @@ export function assertCanTransition(currentStatus, nextStatus, callerRole, note)
     }
   }
 
-  if (transition?.requiresNote && !hasNote(note)) {
+  // Record-keeping, not permission — so it survives the admin override. Keyed on
+  // the destination, not the matched row: if ANY transition into nextStatus needs
+  // a note, it's required — even for an admin taking a path no row declares, the
+  // one cancel route with no other guardrail. Table-driven, no status literal.
+  const destinationRequiresNote = TRANSITIONS.some(
+    (t) => t.to === nextStatus && t.requiresNote,
+  );
+  if (destinationRequiresNote && !hasNote(note)) {
     throw new ApiError(
       400,
       ErrorCode.VALIDATION_ERROR,
