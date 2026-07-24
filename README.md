@@ -76,14 +76,14 @@ src/
 ├── services/      business logic, incl. queue/transitions.js
 ├── controllers/   request → service → response
 ├── routes/        one <resource>.routes.js per resource, registered in index.js
-├── utils/         phone normalizer · ApiError · response envelope
+├── utils/         phone normalizer · password hashing · ApiError · response envelope
 ├── app.js         express wiring
 └── server.js      DB connect + listen
 ```
 
 ## Shared code — do not fork these
 
-Four lanes build in parallel against one contract. These five pieces are single-source; a second copy is a bug, not a convenience.
+Four lanes build in parallel against one contract. These six pieces are single-source; a second copy is a bug, not a convenience.
 
 | File                       | Why it's shared                                                      |
 | -------------------------- | -------------------------------------------------------------------- |
@@ -91,6 +91,7 @@ Four lanes build in parallel against one contract. These five pieces are single-
 | `middlewares/auth.js`      | The one place the JWT is read                                        |
 | `middlewares/authorize.js` | The one role gate — don't re-implement per lane                      |
 | `utils/phone.js`           | Load-bearing: there is no DB uniqueness backstop on patient identity |
+| `utils/password.js`        | Two credential tables (`clinics`, `staff`) — salt rounds and hook guards must not drift |
 | `utils/response.js`        | Every response uses the contract envelope                            |
 
 ## Adding a resource

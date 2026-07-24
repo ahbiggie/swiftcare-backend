@@ -123,11 +123,31 @@ Routes are wired with real `auth` and `authorize` middleware but stub handlers.
 
 **Rationale:** the table is contract data and belongs in the scaffold; the guard is Lane 1's work and shouldn't be pre-empted. The TODO also places the **concurrency guard in the calling service, not in the guard function** — the caller must re-read the queue row inside a transaction and compare status immediately before writing. A pure function can't protect against two nurses advancing the same visit simultaneously, and putting the note here is cheaper than discovering it in testing.
 
+### D6 — `Staff.email` is globally unique, not per-clinic
+
+The intuitive schema is a unique index on `(clinicId, email)` — one clinic can't invite the same address twice, but two different clinics can each invite the same person. That models the real world correctly: a locum doctor working two clinics has one email.
+
+**Chose:** a **global** unique index on `email`, matching `Clinic.email`.
+
+**Why the intuitive version is wrong here:** `POST /auth/login` takes `{ email, password }` and nothing else — no `clinicId`, and no way to supply one, since the clinic scope is read *out of* the token the login call is trying to issue. So the lookup is `findOne({ where: { email } })`. If two clinics hold the same address, that query matches two rows and Sequelize gives no guarantee which comes back — the user lands in an arbitrary clinic. `Clinic.email` is globally unique for exactly this reason; staff email is under the same constraint and needs the same answer.
+
+**Trade-off, stated plainly:** one human with one email address cannot hold accounts at two clinics in v1. That is a real limitation, not an oversight. Revisit when login gains a disambiguator — a clinic selector in the request, a clinic-qualified login URL, or an account-picker step after a multi-hit email lookup. Any of those makes per-clinic uniqueness safe; none of them exist today.
+
+The `(clinicId, email)` index is still present, **non-unique**, to serve clinic-scoped reads (`GET /users`, `GET /staff/doctors`).
+
+### D7 — One password hasher, shared by both credential tables
+
+`clinics` and `staff` both store password hashes, so the `beforeCreate`/`beforeUpdate` hooks and `comparePassword` existed as byte-for-byte copies in two models.
+
+**Chose:** `utils/password.js` exporting `hashPassword` and `comparePassword`. `SALT_ROUNDS` lives there and nowhere else; no model imports `bcrypt` directly.
+
+**Rationale:** same category as [S1](#s1--one-phone-normalizer-load-bearing) and [S2](#s2--one-role-gate). A second copy means raising the cost factor, or fixing a bug in the hook guards, silently applies to only one kind of account — and the account it misses is the one nobody tested. Added to the README's shared-code table so it's covered by the same "do not fork" rule.
+
 ---
 
 ## Shared code
 
-Five files are single-source. A second copy is a bug, not a convenience. Enumerated in the README so "I'll just write a small local helper" is visibly against the rules.
+Six files are single-source. A second copy is a bug, not a convenience. Enumerated in the README so "I'll just write a small local helper" is visibly against the rules.
 
 ### S1 — One phone normalizer, load-bearing
 

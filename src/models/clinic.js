@@ -1,7 +1,5 @@
 import { DataTypes } from 'sequelize';
-import bcrypt from 'bcrypt';
-
-const SALT_ROUNDS = 10;
+import { hashPassword, comparePassword } from '../utils/password.js';
 
 export default (sequelize) => {
     const Clinic = sequelize.define(
@@ -24,11 +22,11 @@ export default (sequelize) => {
             indexes: [{ unique: true, fields: ['email'] }],
             hooks: {
                 beforeCreate: async (clinic) => {
-                    clinic.password = await bcrypt.hash(clinic.password, SALT_ROUNDS);
+                    clinic.password = await hashPassword(clinic.password);
                 },
                 beforeUpdate: async (clinic) => {
                     if (clinic.changed('password')) {
-                        clinic.password = await bcrypt.hash(clinic.password, SALT_ROUNDS);
+                        clinic.password = await hashPassword(clinic.password);
                     }
                 },
             },
@@ -36,9 +34,10 @@ export default (sequelize) => {
 
     // POST auth/login to verify a plaintext password against the hash stored.
     Clinic.prototype.comparePassword = function (candidate) {
-        return bcrypt.compare(candidate, this.password);
+        return comparePassword(candidate, this.password);
     };
     Clinic.associate = (db) => {
+        // One clinic has many patients and many staff - this is not a sequelize method, just a placeholder.
         Clinic.hasMany(db.Patient, { foreignKey: 'clinicId' })
         Clinic.hasMany(db.Staff, { foreignKey: 'clinicId' })
     };

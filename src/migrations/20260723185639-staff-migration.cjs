@@ -13,7 +13,9 @@ module.exports = {
         onDelete: 'CASCADE',
       },
       name: { type: Sequelize.STRING, allowNull: false },
-      email: { type: Sequelize.STRING, allowNull: false },
+      // Globally unique: POST /auth/login is { email, password } with no clinicId,
+      // so the lookup is by email alone and must resolve to exactly one row.
+      email: { type: Sequelize.STRING, allowNull: false, unique: true },
       role: { type: Sequelize.STRING, allowNull: false },
       // Literal, not imported from constants: a migration is a snapshot and must
       // not shift if the enum later changes. Matches StaffStatus.INVITED.
@@ -25,10 +27,10 @@ module.exports = {
       updatedAt: { type: Sequelize.DATE, allowNull: false },
     });
 
-    // Email unique per clinic, not globally (staff.js). Name matches the ORM's
-    // auto-generated index name so the two describe the same constraint.
+    // Non-unique — uniqueness lives on email alone (above). This index only
+    // speeds up clinic-scoped reads (GET /users, GET /staff/doctors), which
+    // always filter by clinicId. Mirrors the model's `indexes` block.
     await queryInterface.addIndex('staff', ['clinicId', 'email'], {
-      unique: true,
       name: 'staff_clinic_id_email',
     });
   },
