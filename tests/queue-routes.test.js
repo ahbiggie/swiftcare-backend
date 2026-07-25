@@ -210,6 +210,42 @@ test('admin overrides an otherwise illegal move', async () => {
   assert.equal(event.toStatus, 'Awaiting Payment');
 });
 
+// The test above can't tell "nulled on admin" from "left untouched" — a fresh
+// visit's lastUpdatedBy is null either way. This one makes a staff member stamp
+// the row first, so a stale attribution would be visible if it survived.
+test('admin override clears a previous staff attribution rather than leaving it stale', async () => {
+  const visit = await newVisit();
+  const nurse = seeded.staff.nurse;
+
+  await api(`/queue/${visit.id}/status`, {
+    method: 'POST',
+    token: tokenFor({ id: nurse.id, clinicId: nurse.clinicId, role: 'nurse' }),
+    body: { status: 'Triage Ready' },
+  });
+  await visit.reload();
+  assert.equal(visit.lastUpdatedBy, nurse.id, 'precondition: the nurse stamped the row');
+
+  const { status, body } = await api(`/queue/${visit.id}/status`, {
+    method: 'POST',
+    token: tokenFor({ id: seeded.clinicId, clinicId: seeded.clinicId, role: 'admin' }),
+    body: { status: 'Completed' },
+  });
+  assert.equal(status, 200);
+  // Not the nurse: they didn't make this move. No name beats a wrong name.
+  assert.equal(body.data.lastUpdatedBy, null);
+  await visit.reload();
+  assert.equal(visit.lastUpdatedBy, null);
+
+  // The event log still carries the full, correct history of both moves.
+  const events = await db.QueueStatusEvent.findAll({
+    where: { queueEntryId: visit.id },
+    order: [['createdAt', 'ASC']],
+  });
+  assert.equal(events.length, 2);
+  assert.equal(events[0].changedBy, nurse.id);
+  assert.equal(events[1].changedBy, seeded.clinicId);
+});
+
 test('another clinic cannot see or touch this visit', async () => {
   const visit = await newVisit();
   const token = tokenFor({
