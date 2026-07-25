@@ -143,6 +143,32 @@ The `(clinicId, email)` index is still present, **non-unique**, to serve clinic-
 
 **Rationale:** same category as [S1](#s1--one-phone-normalizer-load-bearing) and [S2](#s2--one-role-gate). A second copy means raising the cost factor, or fixing a bug in the hook guards, silently applies to only one kind of account — and the account it misses is the one nobody tested. Added to the README's shared-code table so it's covered by the same "do not fork" rule.
 
+### D8 — Queue cancellation: a terminal status, note-required, admin-included
+
+Adds `Checked-In → Cancelled` (role `receptionist`) to `TRANSITIONS`, makes `Cancelled` a real `QueueStatus`, and requires a note on the move. Resolves [Q1](#q1--is-cancelled-a-queue-status).
+
+**`Cancelled` is a terminal queue status, not only an appointment status.** Q1 flagged the ambiguity: the contract calls an active visit "any status except `Completed`/`Cancelled`", yet `Cancelled` wasn't in the queue enum. Chosen reading: a visit *can* be abandoned mid-flow, so `Cancelled` joins the queue enum and stays **out** of `ACTIVE_QUEUE_STATUSES`. This is load-bearing for `409 QUEUE_ALREADY_CHECKED_IN` — a cancelled visit is closed, so the patient can check in again. The alternative (no cancel path) would strand a patient who abandoned a visit, unable to ever re-register.
+
+**The note is a validation requirement, not a permission one — and it's table-driven.** The rule lives on the row (`requiresNote: true`), not as an `if (nextStatus === CANCELLED)` in the function, so a second note-requiring transition would change only the table. A missing note is `400 VALIDATION_ERROR` — the move is legal and the role is right, so it's neither `409` nor `403`; it's a missing field. Order matters: legality → role → note, so a caller is never told their note is missing for a move that wasn't theirs to make.
+
+**The note requirement survives the admin override; the permission checks don't.** Admin's override is about *who may act*, so it skips the legality and role checks. A note is about *whether the reason gets recorded* — a different axis — so it is **not** skipped. The guard splits accordingly: the `isAdmin` bypass wraps only the two permission checks. This matters because the system is billing-adjacent (BR-006): an admin silently cancelling a visit that already has vitals or a consultation is exactly what an audit trail exists to catch.
+
+**The note check is keyed on the destination, not the matched row.** First cut asked "does the matched transition require a note", which left a hole: an admin cancelling from a state no row declares (`Awaiting Payment → Cancelled`) bypassed the table lookup entirely and so escaped the note. That undefined path is the one cancellation route with *no other guardrail*, so it's where the note matters most — the first cut had it backwards, guarding the ordinary path and freeing the powerful one. Fixed by asking "does any row into `nextStatus` require a note" (`TRANSITIONS.some(t => t.to === nextStatus && t.requiresNote)`) — still no status literal in the logic, just a different slice of the same data. Because every cancel-row carries `requiresNote`, it reads as "moving to Cancelled always needs a note, regardless of which row matched or whether one matched at all."
+
+**Note validation rejects blanks.** Empty string and whitespace-only count as missing (`note.trim().length > 0`) — a blank reason is no reason.
+
+### D9 — CORS: env-driven allow-list, rejection routed through `ApiError`
+
+The frontend now calls the API from a browser, which is the trigger the deferred CORS item named. Added the `cors` middleware in `app.js` with an origin allow-list read from `CORS_ORIGIN` (comma-separated, in `.env.example`), and `FORBIDDEN_ORIGIN` to the error catalog.
+
+**Allow-list is configuration, not code.** Origins live in `CORS_ORIGIN` and are parsed at boot (`split(',')`, trimmed, empties dropped), so dev/staging/prod differ by env alone — no code change to add a frontend host. Empty/unset `CORS_ORIGIN` means no browser origin is allowed, which fails closed.
+
+**Requests with no `Origin` header pass.** Server-to-server calls, curl, and health checks send no `Origin`, so they're allowed through — CORS is a *browser* enforcement, not an authentication layer, and must never stand in for the `Authorization` header. The role gate ([S2](#s2--one-role-gate)) and `auth` middleware remain the actual access control.
+
+**Rejection is an `ApiError(403, FORBIDDEN_ORIGIN)`, not a bare `Error`.** This is the whole reason the code exists: a plain `Error` from the origin callback falls through `errorHandler` to the generic `500 INTERNAL_ERROR` branch ([S3](#s3--errors-go-through-apierror--one-handler)) — the wrong status (a `403` access decision, not a server fault) and inconsistent with every other rejection in the API. Routing through `ApiError` renders the contract's error envelope with the right code. Verified end-to-end (allowed → 200, disallowed → 403 `FORBIDDEN_ORIGIN`, no-Origin → 200), and covered in `tests/cors.test.js`.
+
+**Now documented in the contract.** Per the deferred note, CORS earns a line in the contract's Conventions and `FORBIDDEN_ORIGIN` joins the error catalog — done here, not before.
+
 ---
 
 ## Shared code
@@ -227,11 +253,13 @@ The database connection has been verified: `sequelize.authenticate()` successful
 
 Unresolved. Each needs an owner before the work it blocks starts.
 
-### Q1 — Is `Cancelled` a queue status?
+### Q1 — Is `Cancelled` a queue status? — **RESOLVED, see [D8](#d8--queue-cancellation-a-terminal-status-note-required-admin-included)**
 
 The contract defines an active visit as "any status except `Completed`/`Cancelled`", but `Cancelled` is not in the Queue Status enum — it only appears in Appointment Status. So either a queue entry can be cancelled and the enum is incomplete, or visits are never cancelled and the definition should say `Completed` only.
 
 `ACTIVE_QUEUE_STATUSES` currently assumes the latter. **This affects the `409 QUEUE_ALREADY_CHECKED_IN` check**: if a visit can be abandoned mid-flow with no cancel path, that patient can never check in again. Worth resolving before Lane 2 builds check-in.
+
+**Resolved:** `Cancelled` *is* a queue status. `Checked-In → Cancelled` is a real, note-required transition, and `Cancelled` is terminal (excluded from `ACTIVE_QUEUE_STATUSES`), so a cancelled visit frees the patient to check in again. See D8 for the full reasoning.
 
 ### Q2 — Queue state machine: imported module or internal HTTP call?
 
@@ -256,8 +284,8 @@ Not oversights. Each is a conscious "not yet", with the trigger for revisiting.
 | 9 of 10 models + first migration         | Schema is the critical path and blocks all four lanes                                     | **Next.** Highest priority.                                                                                        |
 | `assertCanTransition` implementation     | Lane 1's work, not the scaffold's                                                         | Lane 1 starts                                                                                                      |
 | Concurrent-duplicate lock (phone-scoped) | Post-MVP per the contract; residual duplicates handled administratively                   | Real concurrent load                                                                                               |
-| Tests                                    | No framework installed; nothing to test while every handler is a stub                     | First real handler lands                                                                                           |
+| Tests                                    | ~~No framework installed~~ **Started.** `node --test` (zero-dep) covers the queue transition guard in `tests/`. No framework beyond Node's built-in runner yet | Broaden past the queue guard when the first HTTP handler lands                     |
 | Linting                                  | An `eslint-disable` comment already exists with no ESLint — mild inconsistency, accepted  | Team agrees on a style                                                                                             |
 | CI                                       | Nothing to run without tests                                                              | Tests exist                                                                                                        |
 | `CONTRIBUTING.md` + PR template          | Branch naming and PR expectations currently live only in the README                       | Before lanes branch                                                                                                |
-| CORS (Lane 1 / `app.js`)                 | Not in `app.js` today; documenting unbuilt behavior would violate this doc's own standard | **Before frontend calls the API from a browser.** Then it earns a line in the contract's Conventions — not before. |
+| CORS (Lane 1 / `app.js`)                 | ~~Not in `app.js` today~~ **Done — see [D9](#d9--cors-env-driven-allow-list-rejection-routed-through-apierror).** Env-driven allow-list, `403 FORBIDDEN_ORIGIN`, now in the contract's Conventions | — |

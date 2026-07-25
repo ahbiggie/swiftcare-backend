@@ -8,6 +8,7 @@ export const QueueStatus = {
   IN_CONSULTATION: 'In Consultation',
   AWAITING_PAYMENT: 'Awaiting Payment',
   COMPLETED: 'Completed',
+  CANCELLED: 'Cancelled',
 };
 
 export const Role = {
@@ -44,6 +45,7 @@ export const ErrorCode = {
   VALIDATION_ERROR: 'VALIDATION_ERROR',
   UNAUTHENTICATED: 'UNAUTHENTICATED',
   FORBIDDEN_ROLE: 'FORBIDDEN_ROLE',
+  FORBIDDEN_ORIGIN: 'FORBIDDEN_ORIGIN',
   INVITE_NOT_ACCEPTED: 'INVITE_NOT_ACCEPTED',
   NOT_FOUND: 'NOT_FOUND',
   DUPLICATE_PATIENT: 'DUPLICATE_PATIENT',
@@ -53,8 +55,11 @@ export const ErrorCode = {
   PAYMENT_NOT_DUE: 'PAYMENT_NOT_DUE',
 };
 
-// Active = any status except Completed. A cancelled visit is represented by the
-// appointment status, not the queue, so Completed is the only terminal state here.
+// Active = any status except the two terminal ones, Completed and Cancelled.
+// A visit can now be cancelled on the queue itself (Checked-In -> Cancelled),
+// so Cancelled is a real terminal queue state, not only an appointment status.
+// This resolves the ambiguity S4/Q1 flagged: the "one active visit per patient"
+// check treats a cancelled visit as closed, so the patient can check in again.
 export const ACTIVE_QUEUE_STATUSES = [
   QueueStatus.CHECKED_IN,
   QueueStatus.TRIAGE_READY,

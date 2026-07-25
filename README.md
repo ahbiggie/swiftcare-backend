@@ -47,9 +47,12 @@ Verify:
 ```bash
 curl http://localhost:3000/api/health
 # {"success":true,"data":{"status":"ok"}}
+
+# Run the test suite:
+npm test
 ```
 
-On Windows, `createdb` requires the PostgreSQL `bin` directory on your `PATH`. If it isn't, create the database from pgAdmin or psql instead.
+On Windows, `createdb` requires the PostgreSQL `bin` directory on your `PATH`. If it isn't, create the database from pgAdmin or psql instead. Also, if PowerShell script execution is disabled, you can run tests directly using `node --test`.
 
 ### Scripts
 
@@ -60,6 +63,7 @@ On Windows, `createdb` requires the PostgreSQL `bin` directory on your `PATH`. I
 | `npm run migrate`      | Run pending migrations               |
 | `npm run migrate:undo` | Roll back the last migration         |
 | `npm run seed`         | Run all seeders                      |
+| `npm test`             | Run unit tests (via `node --test`)   |
 
 ---
 
@@ -127,8 +131,16 @@ git checkout -b lane-1-auth
 git push -u origin lane-1-auth
 ```
 
-## Not built yet
+## Project Progress & Todo
 
-- `assertCanTransition()` in `services/queue/transitions.js` — the transition table is filled in, the guard is a stub (Lane 1)
-- 9 of 10 models, and the first migration — only `Patient` exists, as the reference pattern
-- Every route handler outside `/api/health` returns `501 NOT_IMPLEMENTED`
+### Built / Implemented
+
+- **Queue transitions guard**: `assertCanTransition()` in [transitions.js](src/services/queue/transitions.js) is fully implemented and verified via unit tests in [queue-transitions.test.js](tests/queue-transitions.test.js).
+- **Database Models**: 3 of 10 models ([patient.js](src/models/patient.js), [clinic.js](src/models/clinic.js), and [staff.js](src/models/staff.js)) have been defined and registered in [index.js](src/models/index.js).
+- **Database Migrations**: Initial migrations for `Clinic` and `Staff` tables have been created and executed (including schema updates).
+
+### Not built yet
+
+- **Patient Migration**: The migration for the `patients` table has not yet been generated.
+- **Remaining Models & Migrations**: The remaining 7 of 10 models (such as `Appointment`, `Vital`, `Consultation`, `Prescription`, `Invoice`, `Payment`, etc.) and their migrations.
+- **Route Handlers**: Every route handler outside `/api/health` returns `501 NOT_IMPLEMENTED`.

@@ -315,6 +315,10 @@ The role gate reads from the token. This is the **one shared permission check** 
 
 Every request is auto-scoped to the token's `clinicId`. No cross-clinic access.
 
+### CORS
+
+Browser clients must call from an allowed origin. The server reads a comma-separated allow-list from `CORS_ORIGIN` (see `.env.example`); a browser request from any other origin is rejected with `403 FORBIDDEN_ORIGIN`. Requests with no `Origin` header (server-to-server, curl, health checks) are not blocked. CORS is a browser-enforcement layer, not authentication — it never substitutes for the `Authorization` header.
+
 ### Response envelope
 
 ```json
@@ -380,6 +384,7 @@ Backed by a single `constants.js`.
 | `VALIDATION_ERROR` | 400 | Bad or missing fields |
 | `UNAUTHENTICATED` | 401 | No or invalid token |
 | `FORBIDDEN_ROLE` | 403 | Role not allowed |
+| `FORBIDDEN_ORIGIN` | 403 | Browser origin not in the CORS allow-list |
 | `INVITE_NOT_ACCEPTED` | 403 | Login attempted before the invite was accepted |
 | `NOT_FOUND` | 404 | Resource missing |
 | `DUPLICATE_PATIENT` | 409 | Possible phone match, awaiting confirmation |
