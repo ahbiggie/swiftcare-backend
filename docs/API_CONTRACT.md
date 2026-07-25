@@ -368,7 +368,7 @@ Backed by a single `constants.js`.
 
 | Enum | Values |
 | --- | --- |
-| Queue status | `Checked-In` · `Triage Ready` · `Awaiting Doctor` · `In Consultation` · `Awaiting Payment` · `Completed` |
+| Queue status | `Checked-In` · `Triage Ready` · `Awaiting Doctor` · `In Consultation` · `Awaiting Payment` · `Completed` · `Cancelled` |
 | Role | `admin` · `receptionist` · `nurse` · `doctor` · `cashier` |
 | Payment method | `cash` · `mobile_money` · `insurance` |
 | Appointment status | `Scheduled` · `Cancelled` · `Completed` |
@@ -420,8 +420,9 @@ Questions about a specific area of the API? Contact the person listed — this i
 | `Awaiting Doctor` | `In Consultation` | Doctor |
 | `In Consultation` | `Awaiting Payment` | Doctor (automatic on consult complete) |
 | `Awaiting Payment` | `Completed` | Cashier (automatic on payment) |
+| `Checked-In` | `Cancelled` | Receptionist (**`note` required**) |
 
-No backward moves, no skipping. `admin` overrides any transition.
+No backward moves, no skipping. `admin` overrides any transition — except the `note` requirement, which is record-keeping rather than permission.
 
 Violations return `409 QUEUE_ILLEGAL_TRANSITION` or `403 FORBIDDEN_ROLE`.
 
@@ -538,6 +539,8 @@ Body `{ status, note? }` → `{ queueId, status, lastUpdatedBy }`
 
 - Keyed on `queueId` — the visit.
 - The optional free-text field is `note`. It is a single field and it is **never** named `reason`.
+- `note` is **required** when moving to `Cancelled` — omitted or blank returns `400 VALIDATION_ERROR`. Every transition is recorded with its note; `lastUpdatedBy` is `null` for an admin override, since admin is the clinic account rather than a staff member.
+- `GET /queue` is not paginated — a live queue is bounded by the patients present.
 
 ---
 
