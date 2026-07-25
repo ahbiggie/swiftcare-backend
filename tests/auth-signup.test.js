@@ -125,6 +125,6 @@ test('a duplicate email is reported, not a 500', async () => {
   createdClinicIds.push(first.body.data.clinic.id);
 
   const second = await signup({ email });
-  assert.equal(second.status, 400);
-  assert.equal(second.body.error.code, 'VALIDATION_ERROR');
+  assert.equal(second.status, 409);
+  assert.equal(second.body.error.code, 'DUPLICATE_EMAIL');
 });

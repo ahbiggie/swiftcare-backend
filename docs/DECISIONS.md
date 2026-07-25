@@ -195,6 +195,28 @@ Worth noting for whoever adds the next actor-stamped column: any "who did this" 
 
 **Consumed by other lanes as a function, not an HTTP call.** The automatic transitions (`In Consultation → Awaiting Payment`, `Awaiting Payment → Completed`) are real rows in `TRANSITIONS`, so Lane 3's consult-complete and Lane 4's payment must import `changeStatus` from `services/queue/queue.service.js` directly — per [Q2](#q2--queue-state-machine-imported-module-or-internal-http-call)'s module reading — rather than building a second write path. The concurrency lock and the event write live inside that function; a parallel path would silently skip both.
 
+### D11 — `DUPLICATE_EMAIL`, and email uniqueness across two credential tables
+
+Adds `DUPLICATE_EMAIL` (409) to the catalog and makes email unique across `clinics` **and** `staff`, not merely within each. Found while writing `POST /auth/login`, before the lookup was built on the assumption it turned out to violate.
+
+**Why a new code instead of reusing `VALIDATION_ERROR`.** Signup's first cut reported a taken email as `400 VALIDATION_ERROR`. A taken email is a conflict, not a malformed field, and the catalog maps each code to exactly one status — reusing a 400-mapped code for a 409 situation corrupts a mapping the frontend and mobile clients read directly. Same category of drift [S3](#s3--errors-go-through-apierror--one-handler) exists to prevent, one level up: at the enum rather than the handler. Adding a code is a contract change, so it landed in `API_CONTRACT.md` first.
+
+**One code, two writers.** `DUPLICATE_EMAIL` is raised by `POST /auth/clinic/signup` and `POST /auth/invite` — the two endpoints that *create* a credential row. `POST /auth/login` never raises it: login is a read and cannot violate a uniqueness rule. The messages differ per situation even though the code is shared.
+
+**The real finding: cross-table collisions.** `clinics.email` and `staff.email` are two separate unique indexes on two separate tables. Each guards only itself, so **nothing prevented the same address existing in both** — and login looks up by email alone. That is [D6](#d6--staffemail-is-globally-unique-not-per-clinic)'s exact ambiguity (`findOne` matching a row the caller didn't mean) reappearing across tables after being eliminated within one. Left alone, login's "check Clinic, then Staff" would have rested on a premise the schema does not guarantee.
+
+**Chosen:** an application-level pre-check (`assertEmailAvailable`) querying both tables before either write. Postgres cannot express a unique constraint spanning two tables, so this cannot be a database rule without restructuring credentials into a shared table — too large a change for a 14-day build, and recorded here as the thing to revisit if it ever matters more.
+
+**Exactly what is and isn't covered — read this part before trusting it.**
+- **Same-table collisions remain race-proof.** Two concurrent signups with one email both pass the pre-check; the `clinics.email` unique index then rejects the loser, and the service maps that to the same `409 DUPLICATE_EMAIL`. The pre-check supplies the clean message, the constraint supplies the guarantee — the same two-layer pattern as the one-active-visit rule.
+- **Cross-table collisions are not.** Two concurrent requests — one reaching `Clinic.create`, the other `Staff.create`, with the same email, in the same instant — can both pass `assertEmailAvailable` before either write lands, and **no index catches it**, because no index spans both tables. The result is one email in two tables and an ambiguous login.
+
+So the honest guarantee is: **globally unique except under simultaneous cross-table writes.** That window is small (a clinic signing up at the same moment someone is invited with that same address) and the blast radius is one ambiguous account, not data loss. Accepted for the MVP, in the same spirit as [D3](#d3--no-uniqueness-constraint-on-patient-identity)'s missing phone backstop and [D10](#d10--queue-routes-go-live-transition-history-unpaginated-reads-admin-attribution)'s `SET NULL` loss: a named limitation, not an oversight. If it ever needs closing, the fix is a shared credentials table with one unique index — not a bigger pre-check.
+
+**Two orderings inside `loginUser`, and what each costs.**
+- **Fall through on "not found" only, never after a wrong password.** Valid *because* of the guard above: at most one row can match, so a matched row is definitionally the account, and a mismatch is terminal. Without the cross-table guard this reasoning would be unsound — the two decisions are load-bearing on each other, not independent.
+- **Staff status is checked before the password compare.** Not a courtesy: an `invited` row's password is `null`, so there is nothing to compare against and `comparePassword` would be meaningless. The cost is a mild account-enumeration signal — `403 INVITE_NOT_ACCEPTED` confirms the address is registered, where a wrong password would not. The contract mandates that error for this case, so the leak is accepted; the two *other* failure modes (unknown email, wrong password) return a byte-identical `401`, asserted equal in the tests rather than assumed.
+
 ---
 
 ## Shared code
