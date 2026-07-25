@@ -14,13 +14,12 @@ module.exports = {
       },
       fromStatus: { type: Sequelize.STRING, allowNull: false },
       toStatus: { type: Sequelize.STRING, allowNull: false },
-      changedBy: {
-        type: Sequelize.UUID,
-        allowNull: true,
-        references: { model: 'staff', key: 'id' },
-        onUpdate: 'CASCADE',
-        onDelete: 'SET NULL', // losing the who shouldn't lose the event
-      },
+      // Soft reference, deliberately no FK: the actor is a staff row for normal
+      // transitions but the CLINIC row for admin overrides (admin is the clinic
+      // account), and one FK can't point at two tables. An append-only audit log
+      // keeps the id either way — attribution matters more than referential
+      // integrity here, and a hard FK would 500 every admin override.
+      changedBy: { type: Sequelize.UUID, allowNull: true },
       note: { type: Sequelize.TEXT, allowNull: true },
       // No updatedAt — events are immutable.
       createdAt: { type: Sequelize.DATE, allowNull: false },

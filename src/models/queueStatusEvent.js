@@ -13,7 +13,8 @@ export default (sequelize) => {
       queueEntryId: { type: DataTypes.UUID, allowNull: false },
       fromStatus: { type: DataTypes.STRING, allowNull: false },
       toStatus: { type: DataTypes.STRING, allowNull: false },
-      // Nullable: survives staff deletion (SET NULL) — losing who shouldn't lose the event.
+      // Soft reference, no FK: for an admin override the actor is the clinic row,
+      // not a staff row, so one FK can't cover both. See the migration.
       changedBy: { type: DataTypes.UUID, allowNull: true },
       note: { type: DataTypes.TEXT, allowNull: true },
     },
@@ -28,7 +29,8 @@ export default (sequelize) => {
 
   QueueStatusEvent.associate = (db) => {
     QueueStatusEvent.belongsTo(db.QueueEntry, { foreignKey: 'queueEntryId' });
-    QueueStatusEvent.belongsTo(db.Staff, { as: 'changedByStaff', foreignKey: 'changedBy' });
+    // No belongsTo(Staff) on changedBy — it isn't always a staff id (admin
+    // overrides carry the clinic id), so the association would lie.
   };
 
   return QueueStatusEvent;

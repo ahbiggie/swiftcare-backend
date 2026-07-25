@@ -1,6 +1,6 @@
 import db from '../../models/index.js';
 import ApiError from '../../utils/ApiError.js';
-import { ErrorCode } from '../../constants/index.js';
+import { ErrorCode, Role } from '../../constants/index.js';
 import { assertCanTransition } from './transitions.js';
 
 const { QueueEntry, QueueStatusEvent, sequelize } = db;
@@ -32,7 +32,11 @@ export function changeStatus({ queueId, actor, status, note }) {
 
     const fromStatus = entry.status;
     entry.status = status;
-    entry.lastUpdatedBy = actor.id;
+    // queue_entries.lastUpdatedBy is FK-constrained to staff, but an admin is the
+    // CLINIC account — writing its id there violates the constraint (500 on every
+    // admin override). Staff actors only; the event row below keeps the real
+    // attribution for everyone, admin included.
+    entry.lastUpdatedBy = actor.role === Role.ADMIN ? null : actor.id;
     await entry.save({ transaction: t });
 
     // Same transaction as the status change: the event (and its note) can never
