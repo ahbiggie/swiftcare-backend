@@ -62,6 +62,7 @@ export default (sequelize) => {
     // Two FKs into the same model — `as` disambiguates which column each means.
     QueueEntry.belongsTo(db.Staff, { as: 'assignedDoctor', foreignKey: 'assignedDoctorId' });
     QueueEntry.belongsTo(db.Staff, { as: 'lastUpdatedByStaff', foreignKey: 'lastUpdatedBy' });
+    QueueEntry.hasMany(db.QueueStatusEvent, { as: 'statusEvents', foreignKey: 'queueEntryId' });
     // TODO: uncomment once Appointment (Lane 2 / Victor) is built and registered
     // in models/index.js — same pattern Patient followed waiting on Clinic.
     // QueueEntry.belongsTo(db.Appointment, { foreignKey: 'appointmentId' });
