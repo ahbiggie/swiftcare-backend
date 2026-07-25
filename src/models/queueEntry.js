@@ -1,10 +1,12 @@
 import { DataTypes, Op } from 'sequelize';
-import { QueueStatus } from '../constants/index.js';
+import { QueueStatus, ACTIVE_QUEUE_STATUSES } from '../constants/index.js';
 
-// Terminal statuses — the complement of ACTIVE_QUEUE_STATUSES. A visit in one of
-// these no longer occupies the queue, so it doesn't count toward the
-// one-active-visit rule below.
-const TERMINAL_STATUSES = [QueueStatus.COMPLETED, QueueStatus.CANCELLED];
+// Terminal = whatever isn't active, derived so it can't drift from the shared
+// constant. (The .cjs migration can't import ESM constants, so it restates
+// these as literals — keep 20260724193354-create-queue-entries.cjs in sync.)
+const TERMINAL_STATUSES = Object.values(QueueStatus).filter(
+  (s) => !ACTIVE_QUEUE_STATUSES.includes(s),
+);
 
 export default (sequelize) => {
   const QueueEntry = sequelize.define(
@@ -32,6 +34,9 @@ export default (sequelize) => {
     },
     {
       tableName: 'queue_entries',
+      // Documentation, not enforcement: this project never calls sequelize.sync(),
+      // so nothing here touches Postgres. The real index lives in the migration
+      // (20260724193354-create-queue-entries.cjs) — change both or neither.
       indexes: [
         // One active visit per patient, enforced by the DB. Unlike D3 (patient
         // identity is ambiguous), "already has a non-terminal row" is a plain

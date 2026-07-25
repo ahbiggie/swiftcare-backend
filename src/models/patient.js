@@ -22,6 +22,7 @@ export default (sequelize) => {
 
   Patient.associate = (db) => {
     Patient.belongsTo(db.Clinic, { foreignKey: 'clinicId' });
+    Patient.hasMany(db.QueueEntry, { foreignKey: 'patientId' });
   };
 
   return Patient;

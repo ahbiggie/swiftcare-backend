@@ -61,6 +61,9 @@ export default (sequelize) => {
 
     Staff.associate = (db) => {
         Staff.belongsTo(db.Clinic, { foreignKey: 'clinicId' });
+        // Mirrors QueueEntry's aliased belongsTo pair — the doctor's caseload only;
+        // no reverse side for lastUpdatedBy (audit field, never queried this way).
+        Staff.hasMany(db.QueueEntry, { as: 'assignedVisits', foreignKey: 'assignedDoctorId' });
     };
 
     return Staff;

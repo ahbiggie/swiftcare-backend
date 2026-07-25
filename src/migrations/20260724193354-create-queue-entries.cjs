@@ -40,8 +40,10 @@ module.exports = {
     });
 
     // One active visit per patient — partial unique index, only over non-terminal
-    // rows, so a Completed/Cancelled visit never blocks a fresh check-in. Terminal
-    // literals are the snapshot equivalent of TERMINAL_STATUSES in the model.
+    // rows, so a Completed/Cancelled visit never blocks a fresh check-in.
+    // Literals by necessity: this file is .cjs and constants/index.js is ESM, so
+    // require() would throw ERR_REQUIRE_ESM — migrations can never share the app's
+    // constants. Keep in sync with TERMINAL_STATUSES in models/queueEntry.js.
     await queryInterface.addIndex('queue_entries', ['patientId'], {
       unique: true,
       name: 'one_active_visit_per_patient',
