@@ -135,12 +135,21 @@ git push -u origin lane-1-auth
 
 ### Built / Implemented
 
-- **Queue transitions guard**: `assertCanTransition()` in [transitions.js](src/services/queue/transitions.js) is fully implemented and verified via unit tests in [queue-transitions.test.js](tests/queue-transitions.test.js).
-- **Database Models**: 3 of 10 models ([patient.js](src/models/patient.js), [clinic.js](src/models/clinic.js), and [staff.js](src/models/staff.js)) have been defined and registered in [index.js](src/models/index.js).
-- **Database Migrations**: Initial migrations for `Clinic` and `Staff` tables have been created and executed (including schema updates).
+- **Queue transitions guard**: `assertCanTransition()` in [transitions.js](src/services/queue/transitions.js) — the full rulebook including cancellation + required notes — verified in [queue-transitions.test.js](tests/queue-transitions.test.js).
+- **Live queue routes**: `GET /queue` and `POST /queue/:queueId/status` are real, backed by [queue.service.js](src/services/queue/queue.service.js) (row-locked transaction, transition history in `QueueStatusEvent`). See [queue-routes.test.js](tests/queue-routes.test.js).
+- **CORS**: env-driven origin allow-list, `403 FORBIDDEN_ORIGIN` on a disallowed origin.
+- **Database Models**: 5 of the original 10 defined and registered in [index.js](src/models/index.js) — `clinic.js`, `staff.js`, `patient.js`, `appointment.js`, `queueEntry.js` — plus a 6th, `queueStatusEvent.js`, a bonus audit table outside the original 10.
+- **Database Migrations**: 8 migrations created and executed — clinics, staff (+ a column-name fix), patients, queue_entries (+ its patients FK), queue_status_events, appointments.
+- **Tests**: `node --test`, 21 passing on `main` (transition guard, CORS, live queue routes).
+
+### In review, not yet on `main`
+
+- **Auth**: `POST /auth/clinic/signup`, `/login`, `/invite`, `/accept-invite` are fully built with their own JWT util, tests, and a proven concurrency guard — sitting in an open PR awaiting review.
 
 ### Not built yet
 
-- **Patient Migration**: The migration for the `patients` table has not yet been generated.
-- **Remaining Models & Migrations**: The remaining 7 of 10 models (such as `Appointment`, `Vital`, `Consultation`, `Prescription`, `Invoice`, `Payment`, etc.) and their migrations.
-- **Route Handlers**: Every route handler outside `/api/health` returns `501 NOT_IMPLEMENTED`.
+- **Patients & appointments route handlers**: `patient.routes.js` is still `501` stubs — the `Patient`/`Appointment` models and migrations exist, but no controller logic reads or writes them yet. No `appointment.routes.js` exists at all.
+- **`POST /queue/check-in`**: not started anywhere — this is what actually creates a `QueueEntry` in real use, and it's gated behind patient CRUD above.
+- **`GET /auth/me`, `GET /users`, `GET /staff/doctors`**: no route, no stub.
+- **Remaining 4 of 10 models**: `Vitals`, `Consultation`, `Prescription`, `Invoice`, `Payment` — none started.
+- **Appointment double-booking guard**: deliberately deferred, see `DECISIONS.md`.
