@@ -1,6 +1,6 @@
 // LOAD-BEARING. The contract puts no uniqueness constraint on patient identity,
 // so this normalizer is the only thing standing between the duplicate-detection
-// workflow and a silently missed match. Every lane must call this one function —
+// workflow and a silently missed match. Every lane must call this one function
 // do not write a second normalizer.
 //
 // Contract: strip non-digits, then reduce to the national 0-prefixed form so
