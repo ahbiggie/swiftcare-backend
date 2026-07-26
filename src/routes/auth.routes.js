@@ -1,5 +1,13 @@
 import { Router } from 'express';
-import { postClinicSignup, postLogin } from '../controllers/auth.controller.js';
+import auth from '../middlewares/auth.js';
+import authorize from '../middlewares/authorize.js';
+import { Role } from '../constants/index.js';
+import {
+  postClinicSignup,
+  postLogin,
+  postInvite,
+  postAcceptInvite,
+} from '../controllers/auth.controller.js';
 
 const router = Router();
 
@@ -9,5 +17,15 @@ router.post('/clinic/signup', postClinicSignup);
 
 // Public for the same reason — this is the route that issues the token.
 router.post('/login', postLogin);
+
+// admin only — a static role check is the right tool here (unlike the queue
+// routes): "who may invite" doesn't depend on any request-specific state.
+router.post('/invite', auth, authorize(Role.ADMIN), postInvite);
+
+// Deliberately NO auth middleware. The person calling this has no JWT yet —
+// that's the entire point of an invite flow. The gate is knowing the invite
+// token itself, carried in the body, not a Bearer header. Mounting `auth` here
+// would make this endpoint uncallable by the exact people it exists for.
+router.post('/accept-invite', postAcceptInvite);
 
 export default router;

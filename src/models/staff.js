@@ -5,7 +5,9 @@ import { hashPassword, comparePassword } from '../utils/password.js';
 // Staff are the invited users (receptionist | nurse | doctor | cashier).
 // `admin` is deliberately excluded: the admin account IS the Clinic record
 // (see clinic.js — "The Clinic account is the admin account"). Derive the allowed set from Role by removing admin
-const INVITABLE_ROLES = Object.values(Role).filter((r) => r !== Role.ADMIN);
+// Exported so POST /auth/invite can validate a role up front with a friendly
+// message, rather than relying on the model's own isIn validator error text.
+export const INVITABLE_ROLES = Object.values(Role).filter((r) => r !== Role.ADMIN);
 
 export default (sequelize) => {
     const Staff = sequelize.define(
