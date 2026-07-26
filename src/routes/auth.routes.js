@@ -7,6 +7,7 @@ import {
   postLogin,
   postInvite,
   postAcceptInvite,
+  getMe,
 } from '../controllers/auth.controller.js';
 
 const router = Router();
@@ -27,5 +28,8 @@ router.post('/invite', auth, authorize(Role.ADMIN), postInvite);
 // token itself, carried in the body, not a Bearer header. Mounting `auth` here
 // would make this endpoint uncallable by the exact people it exists for.
 router.post('/accept-invite', postAcceptInvite);
+
+// Any signed-in user — no role restriction, just a valid token.
+router.get('/me', auth, getMe);
 
 export default router;

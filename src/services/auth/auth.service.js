@@ -251,3 +251,45 @@ export async function acceptInvite({ inviteToken, password }) {
     return { token: signStaffToken(staff), user: staffAsUser(staff) };
   });
 }
+
+// GET /auth/me — any signed-in user. actor is req.user, set by the auth
+// middleware from the token. Reads back the real row rather than trusting the
+// token's stale copy of name/role, so a renamed or role-changed account
+// reflects immediately rather than only after the next login.
+export async function getCurrentUser(actor) {
+  if (actor.role === Role.ADMIN) {
+    const clinic = await Clinic.findByPk(actor.id);
+    if (!clinic) throw new ApiError(404, ErrorCode.NOT_FOUND, 'Account not found.');
+    return clinicAsUser(clinic);
+  }
+  const staff = await Staff.findByPk(actor.id);
+  if (!staff) throw new ApiError(404, ErrorCode.NOT_FOUND, 'Account not found.');
+  return staffAsUser(staff);
+}
+
+// GET /users — admin only, clinic-scoped by the caller's own token.
+export async function listStaff({ clinicId, role, status, limit, offset }) {
+  const where = { clinicId };
+  if (role) where.role = role;
+  if (status) where.status = status;
+  const { rows, count } = await Staff.findAndCountAll({
+    where, limit, offset, order: [['createdAt', 'DESC']],
+  });
+  // Deliberately NOT staffAsUser — that shape is {id,name,role,clinicId} for
+  // auth tokens. This is the contract's distinct GET /users shape.
+  const users = rows.map((s) => ({ id: s.id, name: s.name, email: s.email, role: s.role, status: s.status }));
+  return { users, total: count };
+}
+
+// GET /staff/doctors — receptionist/nurse/admin, for populating assignedDoctorId
+// at check-in. Active only, deliberately: an invited-but-not-accepted doctor
+// can't log in or see the queue, so offering them here would let a receptionist
+// assign a visit to someone who can never act on it.
+export async function listDoctors(clinicId) {
+  const doctors = await Staff.findAll({
+    where: { clinicId, role: Role.DOCTOR, status: StaffStatus.ACTIVE },
+    attributes: ['id', 'name'],
+    order: [['name', 'ASC']],
+  });
+  return doctors.map((d) => ({ id: d.id, name: d.name }));
+}
