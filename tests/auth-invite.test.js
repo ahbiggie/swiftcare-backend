@@ -305,7 +305,7 @@ test('accept-invite validates required fields', async () => {
 });
 
 test('a null or omitted inviteToken cannot hijack an active account via WHERE ... IS NULL', async () => {
-  // An active row's inviteToken is null (cleared on accept, D12). Sequelize
+  // An active row's inviteToken is null (cleared on accept, D13). Sequelize
   // turns `where: { inviteToken: null }` into `IS NULL`, which would match
   // ANY already-active staffer if the falsy-token guard ever ran after the
   // lookup instead of before it. Prove there's a real victim in the DB whose

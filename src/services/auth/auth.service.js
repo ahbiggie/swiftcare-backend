@@ -45,7 +45,7 @@ const staffAsUser = (staff) => ({
 
 // Email must be unique across BOTH credential tables, not just within each —
 // clinics.email and staff.email are separate unique indexes, so neither alone
-// stops the same address existing in both (see D11). Returns which table (if
+// stops the same address existing in both (see D12). Returns which table (if
 // either) already holds it, so each caller can word its own message.
 async function findEmailOwner(email) {
   const [clinic, staff] = await Promise.all([
@@ -63,7 +63,7 @@ async function assertEmailAvailableForSignup(email) {
   }
 }
 
-// Same guard as signup, but the honest message differs by situation (D12):
+// Same guard as signup, but the honest message differs by situation (D13):
 // "already registered" reads oddly for an admin re-inviting the same address
 // to their own clinic, versus that address belonging to someone else's clinic
 // entirely.
@@ -147,7 +147,7 @@ export async function loginUser({ email, password }) {
   // Status before password, and not as a courtesy: an invited row's password is
   // still null, so there is literally nothing to compare against. This is the
   // only meaningful order. It does leak that the address is registered — a
-  // tradeoff the contract accepts by defining this exact error (see D11).
+  // tradeoff the contract accepts by defining this exact error (see D12).
   if (staff.status === StaffStatus.INVITED) {
     throw new ApiError(
       403,
@@ -225,7 +225,7 @@ export async function acceptInvite({ inviteToken, password }) {
       lock: t.LOCK.UPDATE,
     });
 
-    // One failure mode covers two situations, deliberately (D12). Clearing
+    // One failure mode covers two situations, deliberately (D13). Clearing
     // inviteToken below on success means an already-active row can never be
     // found by its old token again, so "token never existed" and "already
     // accepted" collapse into the same case here — there's nothing to invent
