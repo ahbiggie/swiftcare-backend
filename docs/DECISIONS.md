@@ -251,11 +251,27 @@ So the honest guarantee is: **globally unique except under simultaneous cross-ta
 
 **`FRONTEND_URL` is a new env var, not a contract change.** The contract specifies `POST /auth/invite`'s response as "a staff record ... plus an inviteLink" without naming a URL format; the base URL used to build that link is server configuration, the same category as `PORT` or `CORS_ORIGIN`, not a request/response shape — so it lives in `.env.example`, no contract PR needed. The response is the staff fields spread flat with `inviteLink` alongside them (matching the contract's own flat style, e.g. `GET /auth/me`), not nested under a `staff` key the contract never names.
 
+### D14 — `GET /auth/me`, `/users`, `/staff/doctors`: Lane 1's last three routes
+
+Closes out contract section 1. No new models or migrations — everything reads `Clinic`/`Staff`, both already built.
+
+**Handlers need `try`/`catch` + `next(err)`, same as every other handler in this file — not the shorter form first drafted.** Express 4 does not auto-catch a rejected promise from an async route handler; only a synchronous throw is caught automatically. `getCurrentUser`'s `404 NOT_FOUND` path, or any unexpected DB error, would become an unhandled rejection — not a `500`, not any response at all — if written without the wrapper. Every existing handler in `auth.controller.js` already uses the pattern for exactly this reason; the three new ones follow it rather than introducing a second style.
+
+**`utils/pagination.js` is new, and shared on day one, not added after a second caller shows up.** `GET /users` is the first endpoint that needs `page`/`limit`, but the contract's `1`/`20`/`100` convention is stated once in Conventions and applies to every list endpoint still to come (`GET /patients`, `GET /payments/history`, ...). Pulling the parser out now means the second caller imports it rather than writing a slightly-different version — the same reasoning as `utils/phone.js` and `utils/password.js`, just applied preemptively because the shape of the future need is already explicit in the contract, not speculative.
+
+**`GET /users` and `GET /staff/doctors` are wired in `routes/index.js`, not inside `auth.routes.js`**, despite living in the contract's "Auth & Accounts" section. Their actual paths (`/users`, `/staff/doctors`) carry no `/auth` prefix, and `auth.routes.js` is mounted at `/auth` — nesting them there would silently change their real paths to `/auth/users` and `/auth/staff/doctors`. Contract section is a grouping for readers, not a routing namespace.
+
+**`GET /staff/doctors` filters to `status: active`, which the contract's one-line spec doesn't say explicitly.** An invited-but-not-yet-accepted doctor can't log in and will never see a queue entry assigned to them, so surfacing them here would let a receptionist check a patient in against someone who can't act on it. Verified directly, not assumed: seeded one active and one invited doctor, confirmed only the active one comes back, then proved the assertion actually discriminates by temporarily dropping the status filter and confirming that specific test — and only that test — failed.
+
+**Pagination is verified the same way: proven to page, not just to accept the parameters.** Seeded five rows, requested page 1 and page 2 at `limit=2`, and asserted the returned id sets are disjoint. As with the doctors filter, the negative control matters here: dropping `offset` from the query would still return `200` with two rows on every page, silently identical — the test's job is to catch exactly that, and it was confirmed to (fails when `offset` is dropped, passes when it isn't).
+
+**`GET /auth/me`'s response is flat in `data`, unlike login's `{ token, user }`.** Easy to get backwards by pattern-matching the login handler next to it. Asserted directly: `body.data.user` must be `undefined`, and the key set is `{ id, name, role, clinicId }` at the top level. Also asserted for shape parity across account types, same discipline as D12/D13's login checks — an admin token and a staff token must produce identical key sets from this endpoint, not just correct values.
+
 ---
 
 ## Shared code
 
-Six files are single-source. A second copy is a bug, not a convenience. Enumerated in the README so "I'll just write a small local helper" is visibly against the rules.
+Seven files are single-source. A second copy is a bug, not a convenience. Enumerated in the README so "I'll just write a small local helper" is visibly against the rules.
 
 ### S1 — One phone normalizer, load-bearing
 
