@@ -304,6 +304,43 @@ test('accept-invite validates required fields', async () => {
   assert.equal(body.error.code, 'VALIDATION_ERROR');
 });
 
+test('a null or omitted inviteToken cannot hijack an active account via WHERE ... IS NULL', async () => {
+  // An active row's inviteToken is null (cleared on accept, D12). Sequelize
+  // turns `where: { inviteToken: null }` into `IS NULL`, which would match
+  // ANY already-active staffer if the falsy-token guard ever ran after the
+  // lookup instead of before it. Prove there's a real victim in the DB whose
+  // password must NOT move, not just that some 400 comes back.
+  const adminToken = adminTokenFor(seeded.clinic.id);
+  const { body: victimInvite } = await invite(adminToken);
+  const victimTokenParam = new URL(victimInvite.data.inviteLink).searchParams.get('token');
+  await api('/auth/accept-invite', {
+    method: 'POST',
+    body: { inviteToken: victimTokenParam, password: 'victim-real-password' },
+  });
+  const victimBefore = await db.Staff.findByPk(victimInvite.data.id);
+  assert.equal(victimBefore.status, 'active');
+  assert.equal(victimBefore.inviteToken, null, 'precondition: the victim has a null token, like every active row');
+
+  const explicitNull = await api('/auth/accept-invite', {
+    method: 'POST',
+    body: { inviteToken: null, password: 'attacker-chosen-password' },
+  });
+  assert.equal(explicitNull.status, 400);
+  assert.equal(explicitNull.body.error.code, 'VALIDATION_ERROR');
+
+  const omitted = await api('/auth/accept-invite', {
+    method: 'POST',
+    body: { password: 'attacker-chosen-password' }, // no inviteToken key at all
+  });
+  assert.equal(omitted.status, 400);
+  assert.equal(omitted.body.error.code, 'VALIDATION_ERROR');
+
+  // The proof that matters: the victim, untouched.
+  const victimAfter = await db.Staff.findByPk(victimInvite.data.id);
+  assert.equal(await victimAfter.comparePassword('victim-real-password'), true);
+  assert.equal(await victimAfter.comparePassword('attacker-chosen-password'), false);
+});
+
 test('an accepted staff member can then log in normally', async () => {
   const adminToken = adminTokenFor(seeded.clinic.id);
   const { body: inviteBody } = await invite(adminToken);
