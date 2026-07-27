@@ -1,6 +1,6 @@
-import jwt from 'jsonwebtoken';
 import ApiError from '../utils/ApiError.js';
 import { ErrorCode } from '../constants/index.js';
+import { verifyToken } from '../utils/jwt.js';
 
 export default function auth(req, _res, next) {
   const header = req.headers.authorization || '';
@@ -11,8 +11,8 @@ export default function auth(req, _res, next) {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = { id: decoded.sub, clinicId: decoded.clinicId, role: decoded.role };
+    // Shape comes from utils/jwt.js, the same module that signed it.
+    req.user = verifyToken(token);
     next();
   } catch {
     next(new ApiError(401, ErrorCode.UNAUTHENTICATED, 'Invalid token'));

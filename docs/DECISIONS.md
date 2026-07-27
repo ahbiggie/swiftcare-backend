@@ -209,13 +209,71 @@ PR #5 (`Appointment` model + migration) sat blocked for over a day on a migratio
 
 **Stray local config removed.** `package.json` had `"allowScripts": { "bcrypt@5.1.1": true }`, which is not a field npm reads, and no `lavamoat`/`@lavamoat/allow-scripts` dependency exists anywhere in the repo to read it either. Almost certainly a personal tool artifact from Victor's machine that did nothing for anyone else. Removed rather than left as unexplained dead config.
 
-**Not resolved by this merge:** the DECISIONS numbering. This entry is `D11` against what's on `main` at merge time; the still-open auth PR (#9) independently added its own `D11`/`D12` against a different base. Whichever of the two merges second will collide and needs renumbering on rebase. Flagged here so it is not a surprise.
+**The numbering collision this entry warned about is resolved here.** This entry landed as `D11` against `main`; the auth branch (PR #9) independently had its own `D11`/`D12` against an earlier base. Merging auth second (this merge), its two entries are renumbered to `D12`/`D13` below, keeping this entry's number and its inbound link from the deferred-items table stable.
+
+### D12 · `DUPLICATE_EMAIL`, and email uniqueness across two credential tables
+
+Adds `DUPLICATE_EMAIL` (409) to the catalog and makes email unique across `clinics` **and** `staff`, not merely within each. Found while writing `POST /auth/login`, before the lookup was built on the assumption it turned out to violate.
+
+**Why a new code instead of reusing `VALIDATION_ERROR`.** Signup's first cut reported a taken email as `400 VALIDATION_ERROR`. A taken email is a conflict, not a malformed field, and the catalog maps each code to exactly one status. Reusing a 400-mapped code for a 409 situation corrupts a mapping the frontend and mobile clients read directly. This is the same kind of drift [S3](#s3--errors-go-through-apierror--one-handler) exists to prevent, one level up: in the list of codes rather than in a handler. Adding a code is a contract change, so it landed in `API_CONTRACT.md` first.
+
+**One code, two writers.** `DUPLICATE_EMAIL` is raised by `POST /auth/clinic/signup` and `POST /auth/invite`, the two endpoints that *create* a login record. `POST /auth/login` never raises it: login is a read and cannot violate a uniqueness rule. The messages differ per situation even though the code is shared.
+
+**The real finding: cross-table collisions.** `clinics.email` and `staff.email` are two separate unique indexes on two separate tables. Each guards only itself, so **nothing prevented the same address existing in both**, and login looks up by email alone. That is the same ambiguity [D6](#d6--staffemail-is-globally-unique-not-per-clinic) removed within one table (`findOne` matching a row the caller did not mean), reappearing across two. Left alone, login's "check Clinic, then Staff" would have rested on a premise the schema does not guarantee.
+
+**Chosen:** an application-level pre-check (`assertEmailAvailable`) querying both tables before either write. Postgres cannot express a unique constraint spanning two tables, so this cannot be a database rule without moving all logins into one shared table, which is too large a change for a two-week build, and recorded here as the thing to revisit if it ever matters more.
+
+**What is and is not covered:**
+- **Same-table collisions remain race-proof.** Two concurrent signups with one email both pass the pre-check; the `clinics.email` unique index then rejects the loser, and the service maps that to the same `409 DUPLICATE_EMAIL`. The pre-check supplies the clean message, the constraint supplies the guarantee. Same two-layer pattern as the one-active-visit rule.
+- **Cross-table collisions are not.** Two requests at the same instant, one reaching `Clinic.create` and the other `Staff.create` with the same email, can both pass `assertEmailAvailable` before either write lands, and **no index catches it**, because no index spans both tables. The result is one email in two tables and an ambiguous login.
+
+So the honest guarantee is: **globally unique except under simultaneous cross-table writes.** That window is small (a clinic signing up at the same moment someone is invited with that same address) and the worst outcome is one ambiguous account, not lost data. Accepted for the MVP, in the same spirit as [D3](#d3--no-uniqueness-constraint-on-patient-identity)'s missing phone backstop and [D10](#d10--queue-routes-go-live-transition-history-unpaginated-reads-admin-attribution)'s `SET NULL` loss: a limitation we named rather than missed. If it ever needs closing, the fix is one shared logins table with a single unique index, not a bigger pre-check.
+
+**Two orderings inside `loginUser`, and what each costs.**
+- **Fall through on "not found" only, never after a wrong password.** Valid *because* of the guard above: at most one row can match, so a matched row is the account, and a mismatch ends it. Without the cross-table guard this reasoning would not hold. The two decisions depend on each other.
+- **Staff status is checked before the password compare.** Not a courtesy: an `invited` row's password is `null`, so there is nothing to compare against and `comparePassword` would be meaningless. The cost is a small leak: `403 INVITE_NOT_ACCEPTED` confirms the address is registered, where a wrong password would not. The contract mandates that error for this case, so the leak is accepted; the two *other* failure modes (unknown email, wrong password) return a byte-identical `401`, asserted equal in the tests rather than assumed.
+
+### D13 · Invite tokens: clearing on accept collapses two error cases into one
+
+`POST /auth/invite` and `POST /auth/accept-invite`. Three decisions worth recording; one of them resolves a genuinely open question rather than filling in a blank.
+
+**Invite-message differentiation, not a copy of signup's.** `assertEmailAvailableForInvite` gives a different message per situation rather than reusing signup's "already registered": the email belongs to a *clinic* account, the email is already staffed at *this same clinic* (a literal re-invite), or the email is staffed at a *different* clinic entirely. Same `DUPLICATE_EMAIL` code throughout (D12); only the wording changes to match what is actually true, since "already registered" reads oddly for an admin re-inviting their own already-invited receptionist.
+
+**Role is validated against `INVITABLE_ROLES` before touching the database**, not left to the model's `isIn` validator. `INVITABLE_ROLES` is now exported from `staff.js` rather than staying module-private, so the service can produce a clean 400 with the actual list of valid roles instead of surfacing Sequelize's generic validator text. One export, still one source of truth. The service did not get its own copy of the list.
+
+**The real design call: what happens when `accept-invite` is hit on an already-active row.** No existing code fits cleanly. The request is well-formed, and the clash of states is not quite `VALIDATION_ERROR`. Resolved by clearing `inviteToken` to `null` at the moment of successful accept, which answers both halves of the question in one move:
+- **The two failure cases collapse into one.** Once a row is active, its `inviteToken` is `null`, so it can never be found by the old token again. "This token was never issued" and "this token already got used" become the identical query result: `404 NOT_FOUND`, `"This invite link is invalid or has already been used."` There is no second state to invent a code for, because the lookup itself can no longer distinguish them.
+- **That collapse is also the actual security property being asked for, not just a tidy error.** Without clearing the token, an old invite link sitting unused in an inbox would remain a **permanently valid, unauthenticated password-reset mechanism** for that account, because `accept-invite` does not ask for a current password. Anyone holding a stale link could silently overwrite an active staffer's password at any time. Nulling the token is what makes the link stop *working*, not merely what makes the error message nicer. Verified directly: a replayed token after a successful accept is rejected, and the original password is confirmed unchanged, not merely "an error was returned."
+
+**Considered and rejected: an explicit `staff.status !== 'active'` check alongside the token-clearing.** Given the token invariant (active ⇒ `inviteToken` is `null`, enforced nowhere else but this one function), a second guard would be checking something this same function already makes impossible. That is dead code standing in for a case nothing can currently produce. If a future feature ever needs to re-arm an active row with a fresh invite token (e.g. an admin-triggered password reset by re-invite), that feature has to edit this exact function to do it, and that is when this decision should be revisited.
+
+**Concurrency: the same discipline as the queue guard (D5), applied here for the first time outside the queue.** `acceptInvite` re-reads the Staff row with `lock: t.LOCK.UPDATE` inside a transaction before writing, so two near-simultaneous accepts of the same token can't both succeed. This is not hypothetical. It was proven with a real concurrent test (`Promise.all` of two accept calls, same token, different passwords): exactly one request gets `200`, the other's re-read finds nothing (`404`, the token is already cleared by the winner) and the row ends up with only the winner's password set, never a partially-applied state.
+
+**`FRONTEND_URL` is a new env var, not a contract change.** The contract specifies `POST /auth/invite`'s response as "a staff record ... plus an inviteLink" without naming a URL format; the base URL used to build that link is server configuration, the same category as `PORT` or `CORS_ORIGIN`, not a request or response shape, so it lives in `.env.example` and needs no contract PR. The response is the staff fields spread flat with `inviteLink` alongside them (matching the contract's own flat style, e.g. `GET /auth/me`), not nested under a `staff` key the contract never names.
+
+### D14 · `GET /auth/me`, `/users`, `/staff/doctors`: Lane 1's last three routes
+
+Closes out contract section 1. No new models or migrations. Everything reads `Clinic` and `Staff`, both already built.
+
+**Handlers need `try`/`catch` + `next(err)`, same as every other handler in this file.** Express 4 does not auto-catch a rejected promise from an async route handler; only a synchronous throw is caught automatically. `getCurrentUser`'s `404 NOT_FOUND` path, or any unexpected DB error, would become an unhandled rejection, sending no response at all rather than a `500`, if written without the wrapper. Every existing handler in `auth.controller.js` already uses the pattern for exactly this reason; the three new ones follow it rather than introducing a second style.
+
+**`utils/pagination.js` is new, and shared on day one, not added after a second caller shows up.** `GET /users` is the first endpoint that needs `page`/`limit`, but the contract's `1`/`20`/`100` convention is stated once in Conventions and applies to every list endpoint still to come (`GET /patients`, `GET /payments/history`, ...). Pulling the parser out now means the second caller imports it rather than writing a slightly different one. Same reasoning as `utils/phone.js` and `utils/password.js`, applied early because the contract already says this need is coming.
+
+**`GET /users` and `GET /staff/doctors` are wired in `routes/index.js`, not inside `auth.routes.js`**, despite living in the contract's "Auth & Accounts" section. Their actual paths (`/users`, `/staff/doctors`) carry no `/auth` prefix, and `auth.routes.js` is mounted at `/auth`, so nesting them there would silently change their real paths to `/auth/users` and `/auth/staff/doctors`. Contract section is a grouping for readers, not a routing namespace.
+
+**Both new list endpoints are role-gated to match the contract.** `GET /users` is `admin` only. `GET /staff/doctors` allows `receptionist`, `nurse`, and `admin`. Both use the shared `authorize()` middleware in `routes/index.js`, and both have a test proving a disallowed role gets `403 FORBIDDEN_ROLE`: a nurse against `/users`, and a cashier against `/staff/doctors`. Without the gate on `/users`, any signed-in staff member could read every colleague name, email, and role in the clinic.
+
+**`GET /staff/doctors` filters to `status: active`, which the contract's one-line spec doesn't say explicitly.** An invited-but-not-yet-accepted doctor can't log in and will never see a queue entry assigned to them, so surfacing them here would let a receptionist check a patient in against someone who can't act on it. Verified directly, not assumed: seeded one active and one invited doctor, confirmed only the active one comes back, then proved the test actually catches the problem by temporarily dropping the status filter and confirming that one test, and only that one, failed.
+
+**Pagination is verified the same way: proven to page, not just to accept the parameters.** Seeded five rows, requested page 1 and page 2 at `limit=2`, and asserted the returned id sets are disjoint. As with the doctors filter, the negative control matters here: dropping `offset` from the query would still return `200` with two rows on every page, silently identical. Catching that is the test's job, and it was confirmed to do so: it fails when `offset` is dropped and passes when it is not.
+
+**`GET /auth/me`'s response is flat in `data`, unlike login's `{ token, user }`.** Easy to get backwards by pattern-matching the login handler next to it. Asserted directly: `body.data.user` must be `undefined`, and the key set is `{ id, name, role, clinicId }` at the top level. Also asserted for shape parity across account types, same approach as the login checks in D12 and D13: an admin token and a staff token must produce identical key sets from this endpoint, not just correct values.
 
 ---
 
 ## Shared code
 
-Six files are single-source. A second copy is a bug, not a convenience. Enumerated in the README so "I'll just write a small local helper" is visibly against the rules.
+Seven files are single-source. A second copy is a bug, not a convenience. Enumerated in the README so "I'll just write a small local helper" is visibly against the rules.
 
 ### S1 · One phone normalizer, and why it matters
 

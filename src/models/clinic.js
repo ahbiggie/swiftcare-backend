@@ -37,7 +37,7 @@ export default (sequelize) => {
         return comparePassword(candidate, this.password);
     };
     Clinic.associate = (db) => {
-        // One clinic has many patients and many staff - this is not a sequelize method, just a placeholder.
+        // One clinic has many patients and many staff
         Clinic.hasMany(db.Patient, { foreignKey: 'clinicId' })
         Clinic.hasMany(db.Staff, { foreignKey: 'clinicId' })
         Clinic.hasMany(db.QueueEntry, { foreignKey: 'clinicId' })

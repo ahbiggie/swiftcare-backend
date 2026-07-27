@@ -13,18 +13,11 @@ export default (sequelize) => {
     'QueueEntry',
     {
       id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-      // Denormalized: set once at check-in, never changes. GET /queue is the
-      // hottest read in the system (every role polls it) and is always
-      // clinic-scoped, so storing clinicId avoids a Patient join on every poll.
       clinicId: { type: DataTypes.UUID, allowNull: false },
       patientId: { type: DataTypes.UUID, allowNull: false },
-      // Optional: walk-ins have no appointment. FK wired once Appointment exists.
       appointmentId: { type: DataTypes.UUID, allowNull: true },
       assignedDoctorId: { type: DataTypes.UUID, allowNull: false },
-      // Whoever last changed status; null until the first transition after check-in.
       lastUpdatedBy: { type: DataTypes.UUID, allowNull: true },
-      // Only POST /queue/check-in creates a QueueEntry, always at Checked-In,
-      // so the model owns the default rather than the service.
       status: {
         type: DataTypes.STRING,
         allowNull: false,
@@ -34,16 +27,8 @@ export default (sequelize) => {
     },
     {
       tableName: 'queue_entries',
-      // Documentation, not enforcement: this project never calls sequelize.sync(),
-      // so nothing here touches Postgres. The real index lives in the migration
-      // (20260724193354-create-queue-entries.cjs) — change both or neither.
+
       indexes: [
-        // One active visit per patient, enforced by the DB. Unlike D3 (patient
-        // identity is ambiguous), "already has a non-terminal row" is a plain
-        // checkable fact, so the DB can own it. Partial index: applies only to
-        // non-terminal rows, so a completed/cancelled visit never blocks a fresh
-        // check-in. A violation surfaces as QUEUE_ALREADY_CHECKED_IN — the
-        // service pre-checks for a clean message, this is the race-proof backstop.
         {
           unique: true,
           fields: ['patientId'],

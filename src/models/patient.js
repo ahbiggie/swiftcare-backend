@@ -14,8 +14,6 @@ export default (sequelize) => {
     },
     {
       tableName: 'patients',
-      // Non-unique index: makes the duplicate-candidate lookup fast without
-      // asserting that (clinicId, phone) identifies one person.
       indexes: [{ fields: ['clinicId', 'phone'] }],
     }
   );
