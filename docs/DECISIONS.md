@@ -69,7 +69,7 @@ Rule 1 is bold in the README because of this: getting it wrong fails silently in
 
 `sequelize-cli migration:generate` emits a `.js` file containing `module.exports`, which conflicts with `"type": "module"`.
 
-**Measured, not assumed:** on Node 22 this _silently works_. Node's automatic syntax detection sees CJS syntax and loads it as CommonJS despite the package type. On older Node it throws `ReferenceError: module is not defined`.
+**Tested:** on Node 22 this _silently works_. Node's automatic syntax detection sees CJS syntax and loads it as CommonJS despite the package type. On older Node it throws `ReferenceError: module is not defined`.
 
 **Chose:** rename every generated migration to `.cjs`. The CLI's own discovery pattern is `/^(?!.*\.d\.ts$).*\.(cjs|js|cts|ts)$/`, so `.cjs` is found natively. Verified by reading the CLI source, not assumed.
 
@@ -107,7 +107,7 @@ No natural key identifies a person. Twins share surname and DOB, Jr./Sr. share n
 
 **Chose:** a **non-unique** index on `(clinicId, phone)`: fast candidate lookup, with no claim that the pair identifies one person. Duplicate detection is an application workflow returning `409 DUPLICATE_PATIENT` with candidates for receptionist confirmation.
 
-**Trade-off, stated plainly:** the database will no longer stop duplicates. That responsibility moves entirely into application code, which is why [S1](#s1--one-phone-normalizer-load-bearing) is load-bearing rather than a convenience helper.
+**Trade-off:** the database will no longer stop duplicates. That responsibility moves entirely into application code, which is why [S1](#s1--one-phone-normalizer-and-why-it-matters) matters so much. It is not just a convenience helper.
 
 ### D4 · `501 NOT_IMPLEMENTED` stubs on every route
 
@@ -131,7 +131,7 @@ The intuitive schema is a unique index on `(clinicId, email)`: one clinic can't 
 
 **Why the intuitive version is wrong here:** `POST /auth/login` takes `{ email, password }` and nothing else. There is no `clinicId`, and no way to supply one, since the clinic scope is read *out of* the token the login call is trying to issue. So the lookup is `findOne({ where: { email } })`. If two clinics hold the same address, that query matches two rows and Sequelize gives no guarantee which comes back, so the user lands in an arbitrary clinic. `Clinic.email` is globally unique for exactly this reason; staff email is under the same constraint and needs the same answer.
 
-**Trade-off, stated plainly:** one human with one email address cannot hold accounts at two clinics in v1. That is a real limitation, not an oversight. Revisit when login gains a way to tell the accounts apart: a clinic selector in the request, a clinic-qualified login URL, or an account-picker step after a multi-hit email lookup. Any of those makes per-clinic uniqueness safe; none of them exist today.
+**Trade-off:** one human with one email address cannot hold accounts at two clinics in v1. That is a real limitation. Revisit when login gains a way to tell the accounts apart: a clinic selector in the request, a clinic-qualified login URL, or an account-picker step after a multi-hit email lookup. Any of those makes per-clinic uniqueness safe; none of them exist today.
 
 The `(clinicId, email)` index is still present, **non-unique**, to serve clinic-scoped reads (`GET /users`, `GET /staff/doctors`).
 
@@ -141,17 +141,17 @@ The `(clinicId, email)` index is still present, **non-unique**, to serve clinic-
 
 **Chose:** `utils/password.js` exporting `hashPassword` and `comparePassword`. `SALT_ROUNDS` lives there and nowhere else; no model imports `bcrypt` directly.
 
-**Rationale:** same category as [S1](#s1--one-phone-normalizer-load-bearing) and [S2](#s2--one-role-gate). A second copy means raising the cost factor, or fixing a bug in the hook guards, silently applies to only one kind of account, and the account it misses is the one nobody tested. Added to the README's shared-code table so it's covered by the same "do not fork" rule.
+**Rationale:** same category as [S1](#s1--one-phone-normalizer-and-why-it-matters) and [S2](#s2--one-role-gate). If there were two copies, changing the number of hashing rounds or fixing a bug in one would leave the other untouched, and the one left behind would be whichever nobody thought to test. Added to the README's shared-code table so it's covered by the same "do not fork" rule.
 
 ### D8 · Queue cancellation: a terminal status, note-required, admin-included
 
 Adds `Checked-In → Cancelled` (role `receptionist`) to `TRANSITIONS`, makes `Cancelled` a real `QueueStatus`, and requires a note on the move. Resolves [Q1](#q1--is-cancelled-a-queue-status).
 
-**`Cancelled` is a terminal queue status, not only an appointment status.** Q1 flagged the ambiguity: the contract calls an active visit "any status except `Completed`/`Cancelled`", yet `Cancelled` wasn't in the queue enum. Chosen reading: a visit *can* be abandoned mid-flow, so `Cancelled` joins the queue enum and stays **out** of `ACTIVE_QUEUE_STATUSES`. This is load-bearing for `409 QUEUE_ALREADY_CHECKED_IN`: a cancelled visit is closed, so the patient can check in again. The alternative (no cancel path) would strand a patient who abandoned a visit, unable to ever re-register.
+**`Cancelled` is a terminal queue status, not only an appointment status.** Q1 flagged the ambiguity: the contract calls an active visit "any status except `Completed`/`Cancelled`", yet `Cancelled` wasn't in the queue enum. We read it as: a visit can be abandoned partway through, so `Cancelled` joins the queue list and stays **out** of `ACTIVE_QUEUE_STATUSES`. That is what makes `409 QUEUE_ALREADY_CHECKED_IN` work properly, because a cancelled visit counts as closed and the patient can check in again. The alternative (no cancel path) would strand a patient who abandoned a visit, unable to ever re-register.
 
 **The note is a validation requirement, not a permission one, and it is table-driven.** The rule lives on the row (`requiresNote: true`), not as an `if (nextStatus === CANCELLED)` in the function, so a second note-requiring transition would change only the table. A missing note is `400 VALIDATION_ERROR`: the move is legal and the role is right, so it's neither `409` nor `403`; it's a missing field. Order matters: legality → role → note, so a caller is never told their note is missing for a move that wasn't theirs to make.
 
-**The note requirement survives the admin override; the permission checks don't.** Admin's override is about *who may act*, so it skips the legality and role checks. A note is about *whether the reason gets recorded*, a different question entirely, so it is **not** skipped. The guard splits accordingly: the `isAdmin` bypass wraps only the two permission checks. This matters because the system is billing-adjacent (BR-006): an admin silently cancelling a visit that already has vitals or a consultation is exactly what an audit trail exists to catch.
+**The note requirement survives the admin override; the permission checks don't.** Admin's override is about *who may act*, so it skips the legality and role checks. A note is about *whether the reason gets recorded*, a different question entirely, so it is **not** skipped. The guard splits accordingly: the `isAdmin` bypass wraps only the two permission checks. This matters because the system handles money (BR-006). If an admin quietly cancels a visit that already has vitals or a consultation on it, the record of why needs to survive.
 
 **The note check is keyed on the destination, not the matched row.** First cut asked "does the matched transition require a note", which left a hole: an admin cancelling from a state no row declares (`Awaiting Payment → Cancelled`) bypassed the table lookup entirely and so escaped the note. That undefined path is the one cancellation route with *no other guardrail*, so it is where the note matters most. The first cut had it backwards, guarding the ordinary path and freeing the powerful one. Fixed by asking "does any row into `nextStatus` require a note" (`TRANSITIONS.some(t => t.to === nextStatus && t.requiresNote)`), still with no status literal in the logic, just a different slice of the same data. Because every cancel-row carries `requiresNote`, it reads as "moving to Cancelled always needs a note, regardless of which row matched or whether one matched at all."
 
@@ -165,7 +165,7 @@ The frontend now calls the API from a browser, which is the trigger the deferred
 
 **Requests with no `Origin` header pass.** Server-to-server calls, curl, and health checks send no `Origin`, so they are allowed through. CORS is a *browser* protection, not an authentication layer, and must never stand in for the `Authorization` header. The role gate ([S2](#s2--one-role-gate)) and `auth` middleware remain the actual access control.
 
-**Rejection is an `ApiError(403, FORBIDDEN_ORIGIN)`, not a bare `Error`.** This is the whole reason the code exists: a plain `Error` from the origin callback falls through `errorHandler` to the generic `500 INTERNAL_ERROR` branch ([S3](#s3--errors-go-through-apierror--one-handler)). That is the wrong status (a `403` access decision, not a server fault) and inconsistent with every other rejection in the API. Routing through `ApiError` renders the contract's error envelope with the right code. Verified end-to-end (allowed → 200, disallowed → 403 `FORBIDDEN_ORIGIN`, no-Origin → 200), and covered in `tests/cors.test.js`.
+**Rejection is an `ApiError(403, FORBIDDEN_ORIGIN)`, not a bare `Error`.** The reason this matters: a plain `Error` from the origin callback falls through `errorHandler` to the generic `500 INTERNAL_ERROR` branch ([S3](#s3--errors-go-through-apierror--one-handler)). That is the wrong status (a `403` access decision, not a server fault) and inconsistent with every other rejection in the API. Routing through `ApiError` renders the contract's error envelope with the right code. Verified end-to-end (allowed → 200, disallowed → 403 `FORBIDDEN_ORIGIN`, no-Origin → 200), and covered in `tests/cors.test.js`.
 
 **Now documented in the contract.** Per the deferred note, CORS earns a line in the contract's Conventions and `FORBIDDEN_ORIGIN` joins the error catalog, done here and not before.
 
@@ -179,13 +179,13 @@ Wires `GET /queue` and `POST /queue/:queueId/status` to the real model, which tu
 
 **`changedBy` is a soft reference with no FK** _(fixed a real defect, caught by the route tests)_. The first cut FK-constrained it to `staff`, which passed every test until the admin-override case: **admin is the clinic account**, so its token subject is a *clinic* id, and writing that into a staff-constrained column raised `23503`, so a documented feature returned `500`.
 
-**This is not [D3](#d3--no-uniqueness-constraint-on-patient-identity)'s argument, and shouldn't be read as it.** D3 dropped a constraint because the underlying fact was *ambiguous*: no combination of fields reliably identifies a person, so the database genuinely cannot know. Here nothing is ambiguous: at write time the code knows exactly which table `actor.id` belongs to (`actor.role === ADMIN` or not). The fact is perfectly determinate and merely **unrepresentable** as one hard FK, because Postgres cannot point a single column at two tables. Different problem, different justification, same shape of outcome.
+**This is a different reason from [D3](#d3--no-uniqueness-constraint-on-patient-identity), even though the outcome looks similar.** D3 dropped a constraint because the underlying fact is genuinely unclear: no set of fields reliably identifies a person, so the database cannot know. Here the fact is perfectly clear. When the row is written, the code knows exactly which table `actor.id` came from (`actor.role === ADMIN` or not). The problem is only that Postgres cannot point one column at two different tables, so there is no way to write the rule down as a foreign key.
 
-**The alternative was considered and traded off.** Two nullable columns (`changedByStaffId` FK→`staff` and `changedByClinicId` FK→`clinics`, exactly one populated) would keep full referential integrity and remain expressible in the schema. It was rejected for a 14-day project: it doubles the column count on every actor-stamped table, pushes a two-column `COALESCE` into every read, and needs a `CHECK` to enforce the exactly-one rule. The soft reference is the cheaper trade, not the only option. If audit rigor later outweighs simplicity, that's the migration to write.
+**There was another option, and we chose against it.** Two nullable columns (`changedByStaffId` pointing at `staff`, `changedByClinicId` pointing at `clinics`, with exactly one filled in) would let the database check both links properly. We rejected it for a two-week project: it doubles the columns on every table that records who did something, every read has to check both columns, and it needs an extra rule to stop both being filled at once. Dropping the constraint is the cheaper option, not the only one. If the audit trail ever needs to be airtight, that is the migration to write.
 
-**Consequence, accepted deliberately: `changedBy` loses `SET NULL` on staff deletion.** The original plan had it; without an FK, deleting a staff row leaves old events pointing at an id that no longer resolves. For an append-only audit log that is arguably the *correct* behavior: the true actor id should outlive the actor's employment record, and an event that silently forgets who did it is worse than one naming a departed staffer. Weighed, not overlooked.
+**A knock-on effect we accepted:** deleting a staff member no longer blanks out their id on old events. Without the database link, those events keep pointing at an id that no longer matches anyone. For a history log that is arguably right. The record of who did something should outlast their employment, and an event that forgets who did it is less useful than one naming someone who has since left.
 
-**`queue_entries.lastUpdatedBy` is nulled on admin action, not left stale.** That column *is* FK-constrained to `staff` (from an already-merged migration), so it is written only for staff actors, but the service explicitly assigns `null` rather than skipping the write. Leaving it untouched would be worse than useless: after an admin override the row would still name whichever staff member touched it *previously*, a plausible-looking attribution for a move that person did not make. **No name beats a wrong name.** The read rule that follows: `lastUpdatedBy` is best-effort, staff-only, and answers "which staff member last touched this"; `queue_status_events` is the source of truth for who actually did what, admin included. Anyone computing attribution or dashboard metrics should read the event log, not the entry field. A route test asserts this specifically: a staff member stamps the row, then admin acts, and the stale value must be gone; the earlier admin test could not detect the difference, since a fresh visit is `null` either way.
+**`queue_entries.lastUpdatedBy` is nulled on admin action, not left stale.** That column *is* FK-constrained to `staff` (from an already-merged migration), so it is written only for staff actors, but the service explicitly assigns `null` rather than skipping the write. Leaving it untouched would be actively misleading: after an admin override the row would still name whichever staff member touched it *previously*, which looks believable but is wrong. Better to show no name than the wrong one. So, when reading these fields: `lastUpdatedBy` is best-effort, staff-only, and answers "which staff member last touched this"; `queue_status_events` is the source of truth for who actually did what, admin included. Anyone computing attribution or dashboard metrics should read the event log, not the entry field. A route test asserts this specifically: a staff member stamps the row, then admin acts, and the stale value must be gone; the earlier admin test could not detect the difference, since a fresh visit is `null` either way.
 
 Worth noting for whoever adds the next actor-stamped column: any "who did this" field has the same two-kinds-of-account problem.
 
@@ -197,7 +197,7 @@ Worth noting for whoever adds the next actor-stamped column: any "who did this" 
 
 ### D11 · Appointment: resolved and merged in Victor's absence
 
-PR #5 (`Appointment` model + migration) sat blocked for over a day on a migration collision, with no response from its author after a same-day review. With Lane 2/3/4 all gated on `patients` and now `appointments` existing, this was the actual blocker for the rest of the project, so it was resolved and merged by the lead rather than left waiting indefinitely. Everything below was verified against a real Postgres instance before merging, the same bar as every other model this session; two of the calls are genuine judgment calls made without Victor's input, flagged here so he can revisit them.
+PR #5 (`Appointment` model + migration) sat blocked for over a day on a migration collision, with no response from its author after a same-day review. With Lane 2/3/4 all gated on `patients` and now `appointments` existing, this was the actual blocker for the rest of the project, so it was resolved and merged by the lead rather than left waiting indefinitely. Everything below was verified against a real Postgres instance before merging, the same bar as every other model this session; two of the decisions below were judgement calls made without Victor's input, and are flagged so he can revisit them.
 
 **The collision, fixed by deletion and re-timestamping, not by picking a winner arbitrarily.** Victor's `20260724161530-patient-migration.cjs` and the already-merged `20260725124601-create-patients.cjs` (D10) create the identical table, verified field-for-field. Main's version was kept because it had already been exercised (a real `Patient.create()` round-trip, a same-phone duplicate proving the D3 non-unique index, `updatedAt` confirmed correct); Victor's had not been run anywhere. His duplicate migration is deleted. His `20260724181350-appointments-migration.cjs`, which FKs to `patients`, is re-timestamped to `20260725150000` so it sorts after every migration currently on `main`. Otherwise a fresh clone would try to create `appointments` before `patients` exists and fail on the FK.
 
@@ -205,7 +205,7 @@ PR #5 (`Appointment` model + migration) sat blocked for over a day on a migratio
 
 **Judgment call, made without Victor: `onDelete: RESTRICT` on `patientId` and `doctorId`, not `CASCADE`.** His original had `CASCADE` on both. Changed to match `queue_entries`' precedent for the identical shape of relationship: appointment history is a record, and deleting a patient or a staff member shouldn't silently delete the fact that an appointment happened. `clinicId` stays `CASCADE`: deleting a whole clinic reasonably takes its appointment history with it, same as every other clinic-scoped table. Verified directly: a `patient.destroy()` with an attached appointment is rejected by Postgres, not just assumed from the migration text.
 
-**Judgment call, made without Victor: no double-booking guard.** Nothing stops two appointments for the same doctor at the same date and time. The contract doesn't require one for v1, and this is exactly the kind of thing not to invent unasked. A guard has a real design question behind it (is a `(clinicId, doctorId, date, time)` unique index right, or should distinct time slots of different lengths need an overlap check instead?) that deserves an actual decision, not a placeholder. Deliberately deferred, not silently missing: revisit before appointments carries real scheduling weight, and treat this as open rather than settled.
+**Judgment call, made without Victor: no double-booking guard.** Nothing stops two appointments for the same doctor at the same date and time. The contract does not ask for one in v1, and there is a real design question underneath it: is a unique index on `(clinicId, doctorId, date, time)` the right rule, or do appointments of different lengths need an overlap check instead? That deserves a proper answer rather than a guess. Left open on purpose. Settle it before appointments are used for real scheduling.
 
 **Stray local config removed.** `package.json` had `"allowScripts": { "bcrypt@5.1.1": true }`, which is not a field npm reads, and no `lavamoat`/`@lavamoat/allow-scripts` dependency exists anywhere in the repo to read it either. Almost certainly a personal tool artifact from Victor's machine that did nothing for anyone else. Removed rather than left as unexplained dead config.
 
@@ -217,7 +217,7 @@ PR #5 (`Appointment` model + migration) sat blocked for over a day on a migratio
 
 Six files are single-source. A second copy is a bug, not a convenience. Enumerated in the README so "I'll just write a small local helper" is visibly against the rules.
 
-### S1 · One phone normalizer, load-bearing
+### S1 · One phone normalizer, and why it matters
 
 `utils/phone.js` is the only thing standing between duplicate detection and a silently missed match, because [D3](#d3--no-uniqueness-constraint-on-patient-identity) removed the database backstop. Two lanes normalizing differently means one lane's "no match found" is another's duplicate.
 
@@ -251,7 +251,7 @@ The "one active visit per patient" rule needs a definition of active in code, no
 
 Applied: PR required, 1 approving review, stale approvals dismissed on new commits, force-push and deletion blocked, conversations must be resolved before merge. `enforce_admins: false`.
 
-**The trade-off, explicitly:** with admin enforcement on, the lead (who is also a lane owner) could not merge their own work without a teammate's approval, which risks deadlock on a four-person team where reviewer availability is uneven. With it off, the rule disciplines the three lane owners and the lead keeps an escape hatch.
+**The trade-off:** with admin enforcement on, the lead (who is also a lane owner) could not merge their own work without a teammate approving it. On a four-person team where people are not always around, that risks getting stuck. With it off, the rule still applies to the three lane owners, and the lead keeps a way through when nobody is available.
 
 **The cost:** the exemption is silent. Nothing warns before a direct push to `main`, which is precisely the accident the rule exists to prevent. Mitigation is habit, not tooling: the lead should use PRs anyway. Worth flipping to enforced if the team's review latency turns out to be fine.
 
@@ -321,7 +321,7 @@ Flagged during setup as worth settling before the first commit; the current sing
 
 ## Deliberately deferred
 
-Not oversights. Each is a conscious "not yet", with the trigger for revisiting.
+Each of these is a deliberate "not yet". The last column says what would make us pick it up.
 
 | Deferred                                 | Why                                                                                       | Revisit when                                                                                                       |
 | ---------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |

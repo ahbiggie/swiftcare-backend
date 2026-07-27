@@ -2,9 +2,17 @@
 
 **Version:** v1.0.0
 
-This is the single specification that all four backend lanes, the frontend, and mobile build against. The design is settled; what remains is writing the code.
+SwiftCare is a clinic management system. This document describes the API that its web app and mobile app both call.
 
-> **Changing this contract:** any shape change lands here first, via PR, and only then in code.
+The API covers a patient's whole visit. A clinic signs up and gets an admin account, then invites its staff: receptionists, nurses, doctors, and cashiers. What each person can do depends on their role, and the server checks that on every request.
+
+A visit moves through a queue in a fixed order. A receptionist registers the patient and checks them in. A nurse records vitals and marks the patient ready. A doctor runs the consultation and prescribes medication, which creates an invoice. A cashier takes payment, which closes the visit. The server refuses to skip steps, and refuses to let the wrong role move a visit forward.
+
+Everything is scoped to one clinic. A request can only ever see and change data belonging to the clinic of the person making it.
+
+This document is the single specification that all four backend lanes, the frontend, and mobile build against. The design is settled; what remains is writing the code.
+
+> **Changing this contract:** any change to a URL, field name, or response shape goes here first, in its own pull request, and only then into the code.
 
 **Stack:** Node.js · Express · PostgreSQL · Sequelize
 **Home:** `docs/API_CONTRACT.md`
@@ -313,11 +321,11 @@ The role check reads from the token. This is the **one shared permission check**
 
 ### Clinic scoping
 
-Every request is auto-scoped to the token's `clinicId`. No cross-clinic access.
+Every request is automatically limited to the clinic named in the caller's token (the `clinicId` claim above). Nobody can read or change another clinic's data.
 
 ### CORS
 
-Browser clients must call from an allowed origin. The server reads a comma-separated allow-list from `CORS_ORIGIN` (see `.env.example`); a browser request from any other origin is rejected with `403 FORBIDDEN_ORIGIN`. Requests with no `Origin` header (server-to-server, curl, health checks) are not blocked. CORS is a browser-enforcement layer, not authentication. It never substitutes for the `Authorization` header.
+Browser clients must call from an allowed origin. The server reads a comma-separated allow-list from `CORS_ORIGIN` (see `.env.example`); a browser request from any other origin is rejected with `403 FORBIDDEN_ORIGIN`. Requests with no `Origin` header (server-to-server, curl, health checks) are not blocked. This only restricts browsers. It is not a login check, and it never replaces the `Authorization` header.
 
 ### Response envelope
 
@@ -430,11 +438,11 @@ Violations return `409 QUEUE_ILLEGAL_TRANSITION` or `403 FORBIDDEN_ROLE`.
 
 ## Duplicate patient handling
 
-> **LOCKED.** This is an application-level workflow, not a database uniqueness rule.
+> **Settled.** The app handles this in code. The database does not enforce it.
 
-No natural key uniquely identifies a person. Twins, Jr./Sr., shared household phones, and spelling variants all break it. So the database enforces objective facts only, and v1 carries **no uniqueness constraint on patient identity**.
+There is no single detail that reliably identifies a person. Twins share a surname and date of birth, a father and son share a name, a household shares a phone, and names get spelled differently. So the database only enforces things that are definitely true, and v1 has **no rule stopping two patient records that look alike**.
 
-On registration, the backend searches for possible matches (primarily by normalized phone plus demographic signals) and returns them for receptionist confirmation. Confirming creates a new patient record even when the phone is shared.
+When a patient is registered, the server looks for possible matches, mainly by comparing the reformatted phone number along with details like name and date of birth, and sends them back for the receptionist to check. If the receptionist confirms it is a different person, a new record is created even though the phone number is shared.
 
 Because the database will not catch duplicates, this formatting step carries the whole check. Every lane must format phone numbers the same way, using the shared helper.
 
@@ -452,7 +460,7 @@ Concurrent-duplicate protection (a short-lived, phone-scoped registration lock) 
 
 ## Routes
 
-Legend: **MUST** = ships in v1 · **DEFER** = post-MVP.
+In the tables below, **MUST** means it ships in v1 and **DEFER** means it comes later.
 
 ### 1. Auth & accounts · Lane 1 (Shaibu)
 
