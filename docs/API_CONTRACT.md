@@ -1,8 +1,8 @@
-# SwiftCare Backend — API Route Contract
+# SwiftCare Backend: API Route Contract
 
 **Version:** v1.0.0
 
-This is the single specification that all four backend lanes, the frontend, and mobile build against. The architecture is closed; the remaining work is implementation.
+This is the single specification that all four backend lanes, the frontend, and mobile build against. The design is settled; what remains is writing the code.
 
 > **Changing this contract:** any shape change lands here first, via PR, and only then in code.
 
@@ -16,7 +16,7 @@ This is the single specification that all four backend lanes, the frontend, and 
 - [Getting started](#getting-started)
   - [Base URL](#base-url)
   - [Authentication flow](#authentication-flow)
-  - [Worked example — a full patient journey](#worked-example--a-full-patient-journey)
+  - [Worked example: a full patient journey](#worked-example-a-full-patient-journey)
 - [Conventions](#conventions)
 - [Shared enums](#shared-enums)
 - [Error code catalog](#error-code-catalog)
@@ -58,15 +58,15 @@ http://localhost:4000/api
 
 Every route needs a token except the three public ones ([Authentication](#authentication)). If you've never used a JWT, follow these four steps and you'll be able to call a protected endpoint.
 
-1. **Get a token — pick one of three, depending on who you are:**
-   - `POST /auth/clinic/signup` — you're setting up a brand-new clinic; this creates the first `admin`. (Section 1)
-   - `POST /auth/login` — you already have an account. (Section 1)
-   - `POST /auth/accept-invite` — you were invited and are setting your password for the first time. (Section 1)
+1. **Get a token.** Pick one of three, depending on who you are:
+   - `POST /auth/clinic/signup`: you're setting up a brand-new clinic; this creates the first `admin`. (Section 1)
+   - `POST /auth/login`: you already have an account. (Section 1)
+   - `POST /auth/accept-invite`: you were invited and are setting your password for the first time. (Section 1)
 
-   Each returns a response whose `data` contains a `token` — a long opaque string.
+   Each returns a response whose `data` contains a `token`, a long string of characters.
 
 2. **Store the token.** Keep the `data.token` string on the client.
-   You don't decode it or read anything out of it — the server does that.
+   You don't decode it or read anything out of it. The server does that.
 
 3. **Attach it to every subsequent request** as a header, exactly this shape (from [Conventions → Authentication](#authentication)):
 
@@ -74,17 +74,17 @@ Every route needs a token except the three public ones ([Authentication](#authen
    Authorization: Bearer <token>
    ```
 
-4. **When it's missing, malformed, or expired**, the server replies `401 UNAUTHENTICATED` (from the [error catalog](#error-code-catalog)). There's no refresh endpoint in v1 — get a fresh token by calling `POST /auth/login` again.
+4. **When it's missing, malformed, or expired**, the server replies `401 UNAUTHENTICATED` (from the [error catalog](#error-code-catalog)). There's no refresh endpoint in v1. Get a fresh token by calling `POST /auth/login` again.
 
-### Worked example — a full patient journey
+### Worked example: a full patient journey
 
 One happy path, front to back: **register a patient → check them in → record vitals → advance the queue → run and complete a consultation → take payment.**
 
-Every field name below is lifted verbatim from the route sections (2, 3, 4, 5, 6, 7). If an example and a route section ever disagree, the route section wins and the example is the bug. IDs chain forward — each response hands you the ID the next request needs. Every call below can be pasted in order and run — nothing is skipped or only described afterward.
+Every field name below is copied exactly from the route sections (2, 3, 4, 5, 6, 7). If an example and a route section ever disagree, the route section is correct and the example needs fixing. IDs chain forward: each response hands you the ID the next request needs. Every call below can be pasted in order and run. Nothing is skipped or only described afterward.
 
 All calls need `Authorization: Bearer <token>` (see above). The header is shown once, then omitted for brevity.
 
-**1 — Register the patient** · `POST /patients` (section 2) · role: `receptionist`
+**Step 1. Register the patient** · `POST /patients` (section 2) · role: `receptionist`
 
 ```http
 POST http://localhost:4000/api/patients
@@ -115,7 +115,7 @@ Content-Type: application/json
 }
 ```
 
-**2 — Check the patient in** · `POST /queue/check-in` (section 3) · role: `receptionist`
+**Step 2. Check the patient in** · `POST /queue/check-in` (section 3) · role: `receptionist`
 
 `assignedDoctorId` is a doctor's `id` from `GET /staff/doctors` (section 1). `appointmentId` is optional and omitted here.
 
@@ -131,13 +131,13 @@ Content-Type: application/json
 {
   "success": true,
   "data": {
-    "queueId": "q_9b8c…",   // the visit — same value as queueEntryId below
+    "queueId": "q_9b8c…",   // the visit, same value as queueEntryId below
     "status": "Checked-In"
   }
 }
 ```
 
-**3 — Record vitals** · `POST /vitals` (section 5) · role: `nurse`
+**Step 3. Record vitals** · `POST /vitals` (section 5) · role: `nurse`
 
 ```jsonc
 {
@@ -167,7 +167,7 @@ Content-Type: application/json
 }
 ```
 
-**4 — Nurse advances the queue: `Checked-In` → `Triage Ready`** · `POST /queue/:queueId/status` (section 4) · role: `nurse`
+**Step 4. Nurse advances the queue: `Checked-In` → `Triage Ready`** · `POST /queue/:queueId/status` (section 4) · role: `nurse`
 
 ```json
 // POST http://localhost:4000/api/queue/q_9b8c…/status
@@ -182,7 +182,7 @@ Content-Type: application/json
 }
 ```
 
-**5 — Nurse advances the queue: `Triage Ready` → `Awaiting Doctor`** · same endpoint · role: `nurse`
+**Step 5. Nurse advances the queue: `Triage Ready` → `Awaiting Doctor`** · same endpoint · role: `nurse`
 
 ```json
 { "status": "Awaiting Doctor", "note": "Vitals recorded, ready for doctor" }
@@ -196,7 +196,7 @@ Content-Type: application/json
 }
 ```
 
-**6 — Doctor advances the queue: `Awaiting Doctor` → `In Consultation`** · same endpoint · role: `doctor`
+**Step 6. Doctor advances the queue: `Awaiting Doctor` → `In Consultation`** · same endpoint · role: `doctor`
 
 ```json
 { "status": "In Consultation" }
@@ -210,9 +210,9 @@ Content-Type: application/json
 }
 ```
 
-This is the move that puts the visit in front of the doctor per the [queue rulebook](#queue-rulebook) — it's what `Awaiting Doctor` in step 6's *name* refers to, and it must happen before the consultation is started below.
+This is the move that puts the visit in front of the doctor per the [queue rulebook](#queue-rulebook). It's what `Awaiting Doctor` in step 6's *name* refers to, and it must happen before the consultation is started below.
 
-**7 — Run the consultation** · `POST /consultations` then `POST /consultations/:id/complete` (section 6) · role: `doctor`
+**Step 7. Run the consultation** · `POST /consultations` then `POST /consultations/:id/complete` (section 6) · role: `doctor`
 
 Completing needs a consultation `id`, so start one first:
 
@@ -237,7 +237,7 @@ Completing needs a consultation `id`, so start one first:
 }
 ```
 
-Then complete it — this one call writes notes + diagnosis + prescriptions, creates the invoice, and advances the queue to `Awaiting Payment`, all in one transaction:
+Then complete it. This one call writes notes + diagnosis + prescriptions, creates the invoice, and advances the queue to `Awaiting Payment`, all in one transaction:
 
 ```json
 // POST http://localhost:4000/api/consultations/cons_5d4e…/complete
@@ -262,7 +262,7 @@ Then complete it — this one call writes notes + diagnosis + prescriptions, cre
 }
 ```
 
-**8 — Take payment** · `POST /payments` (section 7) · role: `cashier`
+**Step 8. Take payment** · `POST /payments` (section 7) · role: `cashier`
 
 ```json
 {
@@ -283,7 +283,7 @@ Then complete it — this one call writes notes + diagnosis + prescriptions, cre
 }
 ```
 
-**Recap.** Steps 4–6 are what the [queue rulebook](#queue-rulebook) requires before a doctor can act on a visit — skip them and step 7 is out of sequence with the state machine. The last two transitions, `Awaiting Payment` and `Completed`, are automatic side effects of steps 7 and 8 — there's no separate status call for either.
+**Recap.** Steps 4–6 are what the [queue rulebook](#queue-rulebook) requires before a doctor can act on a visit. Skip them and step 7 happens out of order. The last two transitions, `Awaiting Payment` and `Completed`, are automatic side effects of steps 7 and 8. There is no separate status call for either.
 
 ---
 
@@ -297,7 +297,7 @@ Every route requires an `Authorization: Bearer <token>` header, except:
 - `POST /auth/login`
 - `POST /auth/accept-invite`
 
-The role gate reads from the token. This is the **one shared permission check** — do not re-implement it per lane.
+The role check reads from the token. This is the **one shared permission check**. Do not re-implement it per lane.
 
 **JWT payload** (exact keys every middleware reads; no PII):
 
@@ -317,7 +317,7 @@ Every request is auto-scoped to the token's `clinicId`. No cross-clinic access.
 
 ### CORS
 
-Browser clients must call from an allowed origin. The server reads a comma-separated allow-list from `CORS_ORIGIN` (see `.env.example`); a browser request from any other origin is rejected with `403 FORBIDDEN_ORIGIN`. Requests with no `Origin` header (server-to-server, curl, health checks) are not blocked. CORS is a browser-enforcement layer, not authentication — it never substitutes for the `Authorization` header.
+Browser clients must call from an allowed origin. The server reads a comma-separated allow-list from `CORS_ORIGIN` (see `.env.example`); a browser request from any other origin is rejected with `403 FORBIDDEN_ORIGIN`. Requests with no `Origin` header (server-to-server, curl, health checks) are not blocked. CORS is a browser-enforcement layer, not authentication. It never substitutes for the `Authorization` header.
 
 ### Response envelope
 
@@ -343,9 +343,9 @@ Browser clients must call from an allowed origin. The server reads a comma-separ
 
 ### IDs
 
-UUIDs throughout. All records from one visit share a `queueEntryId` — **the queue entry is the visit**.
+UUIDs throughout. All records from one visit share a `queueEntryId`. **The queue entry is the visit.**.
 
-The database enforces objective facts only: unique `id`, unique `queueEntryId`, valid foreign keys, required fields. There is **no uniqueness constraint on patient identity** — see [Duplicate patient handling](#duplicate-patient-handling).
+The database enforces objective facts only: unique `id`, unique `queueEntryId`, valid foreign keys, required fields. There is **no uniqueness constraint on patient identity**. See [Duplicate patient handling](#duplicate-patient-handling).
 
 ### Pagination
 
@@ -353,8 +353,8 @@ The database enforces objective facts only: unique `id`, unique `queueEntryId`, 
 
 ### Search
 
-- **Name** — partial and case-insensitive.
-- **Phone** — run through the shared normalizer before comparing. It lives in `utils` and is the same for all lanes.
+- **Name**: partial and case-insensitive.
+- **Phone**: run through the shared normalizer before comparing. It lives in `utils` and is the same for all lanes.
 
 ### One active visit per patient
 
@@ -397,15 +397,15 @@ Backed by a single `constants.js`.
 
 ## Resource ownership
 
-Questions about a specific area of the API? Contact the person listed — this is a directory of who to ask, not an internal work-assignment chart.
+Questions about a specific area of the API? Contact the person listed. This is a directory of who to ask, not a work-assignment chart.
 
 | Resource | Contact |
 | --- | --- |
-| Auth & accounts (incl. `GET /staff/doctors`) | Lane 1 — Shaibu |
-| Queue + state machine (shared; called by every lane) | Lane 1 — Shaibu |
-| Patients · Appointments & check-in | Lane 2 — Victor |
-| Vitals · Consultations & prescriptions | Lane 3 — Emmanuel Alliu |
-| Billing & payments · Dashboard & audit | Lane 4 — Emmanuel Dosumu |
+| Auth & accounts (incl. `GET /staff/doctors`) | Shaibu (Lane 1) |
+| Queue and its rules (shared; called by every lane) | Shaibu (Lane 1) |
+| Patients · Appointments & check-in | Victor (Lane 2) |
+| Vitals · Consultations & prescriptions | Emmanuel Alliu (Lane 3) |
+| Billing & payments · Dashboard & audit | Emmanuel Dosumu (Lane 4) |
 
 ---
 
@@ -422,7 +422,7 @@ Questions about a specific area of the API? Contact the person listed — this i
 | `Awaiting Payment` | `Completed` | Cashier (automatic on payment) |
 | `Checked-In` | `Cancelled` | Receptionist (**`note` required**) |
 
-No backward moves, no skipping. `admin` overrides any transition — except the `note` requirement, which is record-keeping rather than permission.
+No backward moves, no skipping. `admin` overrides any transition, except the `note` requirement. That is about record-keeping, not permission.
 
 Violations return `409 QUEUE_ILLEGAL_TRANSITION` or `403 FORBIDDEN_ROLE`.
 
@@ -432,11 +432,11 @@ Violations return `409 QUEUE_ILLEGAL_TRANSITION` or `403 FORBIDDEN_ROLE`.
 
 > **LOCKED.** This is an application-level workflow, not a database uniqueness rule.
 
-No natural key uniquely identifies a person — twins, Jr./Sr., shared household phones, and spelling variants all break it. So the database enforces objective facts only, and v1 carries **no uniqueness constraint on patient identity**.
+No natural key uniquely identifies a person. Twins, Jr./Sr., shared household phones, and spelling variants all break it. So the database enforces objective facts only, and v1 carries **no uniqueness constraint on patient identity**.
 
-On registration, the backend searches for possible matches — primarily by normalized phone plus demographic signals — and returns them for receptionist confirmation. Confirming creates a new patient record even when the phone is shared.
+On registration, the backend searches for possible matches (primarily by normalized phone plus demographic signals) and returns them for receptionist confirmation. Confirming creates a new patient record even when the phone is shared.
 
-Because there is no DB backstop, **normalization is load-bearing**: every lane must normalize identically via the shared utils.
+Because the database will not catch duplicates, this formatting step carries the whole check. Every lane must format phone numbers the same way, using the shared helper.
 
 Concurrent-duplicate protection (a short-lived, phone-scoped registration lock) is deferred post-MVP. Residual duplicates are handled administratively.
 
@@ -454,7 +454,7 @@ Concurrent-duplicate protection (a short-lived, phone-scoped registration lock) 
 
 Legend: **MUST** = ships in v1 · **DEFER** = post-MVP.
 
-### 1. Auth & accounts — Lane 1 (Shaibu)
+### 1. Auth & accounts · Lane 1 (Shaibu)
 
 | Method | Path | Priority | Access |
 | --- | --- | --- | --- |
@@ -488,7 +488,7 @@ Query `?role=&status=&page=&limit=` → `{ users, total }`
 
 ---
 
-### 2. Patients — Lane 2 (Victor)
+### 2. Patients · Lane 2 (Victor)
 
 | Method | Path | Priority | Access |
 | --- | --- | --- | --- |
@@ -502,11 +502,11 @@ Query `?search=&page=&limit=` → `{ patients, total }`
 
 **`POST /patients`**
 Body `{ firstName, lastName, phone, gender, dob, confirmNewPatient? }` → `201`
-`409 DUPLICATE_PATIENT` with candidate matches — see [Duplicate patient handling](#duplicate-patient-handling).
+`409 DUPLICATE_PATIENT` with candidate matches. See [Duplicate patient handling](#duplicate-patient-handling).
 
 ---
 
-### 3. Appointments & check-in — Lane 2 (Victor)
+### 3. Appointments & check-in · Lane 2 (Victor)
 
 | Method | Path | Priority | Access |
 | --- | --- | --- | --- |
@@ -524,7 +524,7 @@ Body `{ patientId, appointmentId?, assignedDoctorId }` → `201 { queueId, statu
 
 ---
 
-### 4. Queue — Lane 1 (Shaibu, shared)
+### 4. Queue · Lane 1 (Shaibu, shared)
 
 | Method | Path | Priority | Access |
 | --- | --- | --- | --- |
@@ -537,14 +537,14 @@ Query `?status=&assignedDoctorId=` → `{ queue: [...] }`
 **`POST /queue/:queueId/status`**
 Body `{ status, note? }` → `{ queueId, status, lastUpdatedBy }`
 
-- Keyed on `queueId` — the visit.
+- Keyed on `queueId`, the visit.
 - The optional free-text field is `note`. It is a single field and it is **never** named `reason`.
-- `note` is **required** when moving to `Cancelled` — omitted or blank returns `400 VALIDATION_ERROR`. Every transition is recorded with its note; `lastUpdatedBy` is `null` for an admin override, since admin is the clinic account rather than a staff member.
-- `GET /queue` is not paginated — a live queue is bounded by the patients present.
+- `note` is **required** when moving to `Cancelled`. Omitted or blank returns `400 VALIDATION_ERROR`. Every transition is recorded with its note; `lastUpdatedBy` is `null` for an admin override, since admin is the clinic account rather than a staff member.
+- `GET /queue` is not paginated. A live queue is bounded by the patients present.
 
 ---
 
-### 5. Vitals — Lane 3 (Emmanuel Alliu)
+### 5. Vitals · Lane 3 (Emmanuel Alliu)
 
 | Method | Path | Priority | Access |
 | --- | --- | --- | --- |
@@ -560,7 +560,7 @@ Query `?queueEntryId=`
 
 ---
 
-### 6. Consultations & prescriptions — Lane 3 (Emmanuel Alliu)
+### 6. Consultations & prescriptions · Lane 3 (Emmanuel Alliu)
 
 | Method | Path | Priority | Access |
 | --- | --- | --- | --- |
@@ -593,7 +593,7 @@ Query `?queueEntryId=`
 
 ---
 
-### 7. Billing & payments — Lane 4 (Emmanuel Dosumu)
+### 7. Billing & payments · Lane 4 (Emmanuel Dosumu)
 
 | Method | Path | Priority | Access |
 | --- | --- | --- | --- |
@@ -605,7 +605,7 @@ Query `?queueEntryId=`
 Query `?queueEntryId=`
 
 **`POST /payments`**
-Body `{ invoiceId, method }` — **no `amount`**; the backend reads the invoice total.
+Body `{ invoiceId, method }`. **No `amount`**: the backend reads the invoice total.
 Response `{ payment, receipt, queueStatus }`
 
 Runs as one transaction with the invoice row locked, and moves the queue entry to `Completed`. The receipt is **data, not a PDF**.
@@ -617,7 +617,7 @@ Query `?date=&method=&page=&limit=`
 
 ---
 
-### 8. Dashboard & admin — Lane 4 (Emmanuel Dosumu)
+### 8. Dashboard & admin · Lane 4 (Emmanuel Dosumu)
 
 | Method | Path | Priority | Access |
 | --- | --- | --- | --- |
