@@ -1,10 +1,8 @@
-// The pattern every lane copies: auth first, then authorize() with the roles the
-// contract grants, then the handler. Swap the 501 stubs for real controllers.
 import { Router } from 'express';
 import auth from '../middlewares/auth.js';
 import authorize from '../middlewares/authorize.js';
 import { Role } from '../constants/index.js';
-import { getPatientsById } from '../controllers/patient.controller.js';
+import { getPatientById } from '../controllers/patient.controller.js';
 
 const router = Router();
 
@@ -16,7 +14,7 @@ const notImplemented = (label) => (_req, res) =>
 
 router.get('/', auth, notImplemented('GET /patients'));
 
-router.get('/:id', auth, getPatientsById);
+router.get('/:id', auth, getPatientById);
 
 router.post(
   '/',

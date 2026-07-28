@@ -1,17 +1,19 @@
 import db from '../models/index.js';
 import ApiError from '../utils/ApiError.js';
-import { ErrorCode, Role } from '../constants/index.js';
+import { ErrorCode } from '../constants/index.js';
 
 const { Patient } = db;
 
-export async function getById(id, clinicId) {
-    const patient = await Patient.findByPk(id);
+const isUuid = (v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 
-    //Both missing and cross-clinic, get a 404 error meassage
-    // (You should not leak other clinics' patient IDs).
+// clinic-scoped lookup
+export async function getById(id, clinicId) {
+    const patient = isUuid(id) ? await Patient.findByPk(id) : null;
+
+    // missing and cross-clinic both look like "not found"
     if (!patient || (patient.clinicId !== clinicId)) {
         throw new ApiError(404, ErrorCode.NOT_FOUND, "Patient not found");
-    } 
+    }
 
     return patient;
 }
