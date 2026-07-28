@@ -62,3 +62,19 @@ export async function register(clinicId, { firstName, lastName, phone, gender, d
 
     return Patient.create({ clinicId, firstName, lastName, phone: normalizedPhone, gender, dob });
 }
+
+// edit demographics, only the fields sent
+export async function update(id, clinicId, fields) {
+    const patient = await getById(id, clinicId);
+
+    const { firstName, lastName, phone, gender, dob } = fields;
+
+    if (firstName !== undefined) patient.firstName = firstName;
+    if (lastName !== undefined) patient.lastName = lastName;
+    if (phone !== undefined) patient.phone = normalizePhone(phone);
+    if (gender !== undefined) patient.gender = gender;
+    if (dob !== undefined) patient.dob = dob;
+
+    await patient.save();
+    return patient;
+}

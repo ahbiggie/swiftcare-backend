@@ -2,15 +2,9 @@ import { Router } from 'express';
 import auth from '../middlewares/auth.js';
 import authorize from '../middlewares/authorize.js';
 import { Role } from '../constants/index.js';
-import { getPatients, getPatientById, postPatient } from '../controllers/patient.controller.js';
+import { getPatients, getPatientById, postPatient, putPatient } from '../controllers/patient.controller.js';
 
 const router = Router();
-
-const notImplemented = (label) => (_req, res) =>
-  res.status(501).json({
-    success: false,
-    error: { code: 'NOT_IMPLEMENTED', message: label },
-  });
 
 router.get('/', auth, getPatients);
 
@@ -27,7 +21,7 @@ router.put(
   '/:id',
   auth,
   authorize(Role.RECEPTIONIST, Role.ADMIN),
-  notImplemented('PUT /patients/:id')
+  putPatient
 );
 
 export default router;
