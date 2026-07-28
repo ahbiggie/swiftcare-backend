@@ -41,3 +41,24 @@ export async function search(clinicId, term, limit, offset) {
 
     return { patients: rows, total: count };
 }
+
+// create, catching likely duplicates by phone
+export async function register(clinicId, { firstName, lastName, phone, gender, dob, confirmNewPatient }) {
+    if (!firstName || !lastName || !phone) {
+        throw new ApiError(400, ErrorCode.VALIDATION_ERROR, 'firstName, lastName and phone are required.');
+    }
+
+    const normalizedPhone = normalizePhone(phone);
+
+    // duplicate check
+    const matches = await Patient.findAll({ where: { clinicId, phone: normalizedPhone } });
+
+    if (matches.length > 0 && !confirmNewPatient) {
+        throw new ApiError(409, ErrorCode.DUPLICATE_PATIENT, 'Possible duplicate patient.', {
+            existingPatients: matches,
+            requiresConfirmation: true,
+        });
+    }
+
+    return Patient.create({ clinicId, firstName, lastName, phone: normalizedPhone, gender, dob });
+}

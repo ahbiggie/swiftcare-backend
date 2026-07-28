@@ -1,5 +1,5 @@
-import { getById, search } from "../services/patient.services.js";
-import { ok } from "../utils/response.js";
+import { getById, search, register } from "../services/patient.services.js";
+import { ok, created } from "../utils/response.js";
 import { parsePagination } from "../utils/pagination.js";
 
 // GET /patients
@@ -8,6 +8,17 @@ export async function getPatients(req, res, next) {
         const { limit, offset } = parsePagination(req.query);
         const data = await search(req.user.clinicId, req.query.search, limit, offset);
         return ok(res, data);
+    } catch (err) {
+        return next(err);
+    }
+}
+
+// POST /patients
+export async function postPatient(req, res, next) {
+    try {
+        const { firstName, lastName, phone, gender, dob, confirmNewPatient } = req.body || {};
+        const patient = await register(req.user.clinicId, { firstName, lastName, phone, gender, dob, confirmNewPatient });
+        return created(res, { patient });
     } catch (err) {
         return next(err);
     }
