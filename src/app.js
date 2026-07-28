@@ -1,9 +1,11 @@
 import express from 'express';
 import cors from 'cors';
+import swaggerUi from 'swagger-ui-express';
 import routes from './routes/index.js';
 import errorHandler from './middlewares/errorHandler.js';
 import ApiError from './utils/ApiError.js';
 import { ErrorCode } from './constants/index.js';
+import swaggerSpec from './config/swagger.js';
 
 const app = express();
 
@@ -21,6 +23,11 @@ app.use(cors({
 }));
 
 app.use(express.json());
+
+// Interactive docs, generated from @openapi JSDoc blocks in src/routes/*.js.
+app.get('/api-docs.json', (_req, res) => res.json(swaggerSpec));
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
 app.use('/api', routes);
 app.use(errorHandler);
 
