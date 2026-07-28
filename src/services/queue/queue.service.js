@@ -3,6 +3,7 @@ import ApiError from '../../utils/ApiError.js';
 import { ErrorCode, Role } from '../../constants/index.js';
 import { assertCanTransition } from './transitions.js';
 import { assertDoctorExists } from '../auth/auth.service.js';
+import { isUuid } from '../../utils/uuid.js';
 
 const { Patient, Appointment, QueueEntry, QueueStatusEvent, sequelize } = db;
 
@@ -19,7 +20,7 @@ export async function checkIn({ clinicId, patientId, appointmentId, assignedDoct
     throw new ApiError(400, ErrorCode.VALIDATION_ERROR, 'patientId and assignedDoctorId are required.');
   }
 
-  const patient = await Patient.findOne({ where: { id: patientId, clinicId } });
+  const patient = isUuid(patientId) ? await Patient.findOne({ where: { id: patientId, clinicId } }) : null;
   if (!patient) {
     throw new ApiError(404, ErrorCode.NOT_FOUND, 'Patient not found');
   }
@@ -27,7 +28,9 @@ export async function checkIn({ clinicId, patientId, appointmentId, assignedDoct
   await assertDoctorExists(clinicId, assignedDoctorId);
 
   if (appointmentId) {
-    const appointment = await Appointment.findOne({ where: { id: appointmentId, clinicId, patientId } });
+    const appointment = isUuid(appointmentId)
+      ? await Appointment.findOne({ where: { id: appointmentId, clinicId, patientId } })
+      : null;
     if (!appointment) {
       throw new ApiError(404, ErrorCode.NOT_FOUND, 'Appointment not found');
     }
