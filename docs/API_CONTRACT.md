@@ -395,6 +395,7 @@ Backed by a single `constants.js`.
 | `FORBIDDEN_ORIGIN` | 403 | Browser origin not in the CORS allow-list |
 | `INVITE_NOT_ACCEPTED` | 403 | Login attempted before the invite was accepted |
 | `NOT_FOUND` | 404 | Resource missing |
+| `DUPLICATE_EMAIL` | 409 | Email already registered to a clinic or staff account |
 | `DUPLICATE_PATIENT` | 409 | Possible phone match, awaiting confirmation |
 | `QUEUE_ILLEGAL_TRANSITION` | 409 | Move is not in the rulebook |
 | `QUEUE_ALREADY_CHECKED_IN` | 409 | Patient already has an active visit |

@@ -45,10 +45,6 @@ export function assertCanTransition(currentStatus, nextStatus, callerRole, note)
     }
   }
 
-  // Record-keeping, not permission — so it survives the admin override. Keyed on
-  // the destination, not the matched row: if ANY transition into nextStatus needs
-  // a note, it's required — even for an admin taking a path no row declares, the
-  // one cancel route with no other guardrail. Table-driven, no status literal.
   const destinationRequiresNote = TRANSITIONS.some(
     (t) => t.to === nextStatus && t.requiresNote,
   );
