@@ -3,6 +3,7 @@ import db from '../../models/index.js';
 import ApiError from '../../utils/ApiError.js';
 import { ErrorCode, Role, StaffStatus } from '../../constants/index.js';
 import { signClinicToken, signStaffToken } from '../../utils/jwt.js';
+import { isUuid } from '../../utils/uuid.js';
 import { INVITABLE_ROLES } from '../../models/staff.js';
 
 const { Clinic, Staff, sequelize } = db;
@@ -297,9 +298,9 @@ export async function listDoctors(clinicId) {
 // shared: is doctorId a real, active doctor in this clinic.
 // Used by both POST /appointments and POST /queue/check-in.
 export async function assertDoctorExists(clinicId, doctorId) {
-  const doctor = await Staff.findOne({
-    where: { id: doctorId, clinicId, role: Role.DOCTOR, status: StaffStatus.ACTIVE },
-  });
+  const doctor = isUuid(doctorId)
+    ? await Staff.findOne({ where: { id: doctorId, clinicId, role: Role.DOCTOR, status: StaffStatus.ACTIVE } })
+    : null;
   if (!doctor) {
     throw new ApiError(404, ErrorCode.NOT_FOUND, 'Doctor not found');
   }
