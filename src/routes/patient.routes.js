@@ -4,6 +4,7 @@ import { Router } from 'express';
 import auth from '../middlewares/auth.js';
 import authorize from '../middlewares/authorize.js';
 import { Role } from '../constants/index.js';
+import { getPatientsById } from '../controllers/patient.controller.js';
 
 const router = Router();
 
@@ -15,7 +16,7 @@ const notImplemented = (label) => (_req, res) =>
 
 router.get('/', auth, notImplemented('GET /patients'));
 
-router.get('/:id', auth, notImplemented('GET /patients/:id'));
+router.get('/:id', auth, getPatientsById);
 
 router.post(
   '/',
