@@ -6,7 +6,7 @@ export default function errorHandler(err, _req, res, _next) {
   if (err instanceof ApiError) {
     return res
       .status(err.statusCode)
-      .json({ success: false, error: { code: err.code, message: err.message } });
+      .json({ success: false, error: { code: err.code, message: err.message, ...err.details } });
   }
 
   if (err.name === 'SequelizeValidationError') {
