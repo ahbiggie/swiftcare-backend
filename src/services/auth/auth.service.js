@@ -293,3 +293,15 @@ export async function listDoctors(clinicId) {
   });
   return doctors.map((d) => ({ id: d.id, name: d.name }));
 }
+
+// shared: is doctorId a real, active doctor in this clinic.
+// Used by both POST /appointments and POST /queue/check-in.
+export async function assertDoctorExists(clinicId, doctorId) {
+  const doctor = await Staff.findOne({
+    where: { id: doctorId, clinicId, role: Role.DOCTOR, status: StaffStatus.ACTIVE },
+  });
+  if (!doctor) {
+    throw new ApiError(404, ErrorCode.NOT_FOUND, 'Doctor not found');
+  }
+  return doctor;
+}
