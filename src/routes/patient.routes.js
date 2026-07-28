@@ -2,7 +2,7 @@ import { Router } from 'express';
 import auth from '../middlewares/auth.js';
 import authorize from '../middlewares/authorize.js';
 import { Role } from '../constants/index.js';
-import { getPatientById } from '../controllers/patient.controller.js';
+import { getPatients, getPatientById } from '../controllers/patient.controller.js';
 
 const router = Router();
 
@@ -12,7 +12,7 @@ const notImplemented = (label) => (_req, res) =>
     error: { code: 'NOT_IMPLEMENTED', message: label },
   });
 
-router.get('/', auth, notImplemented('GET /patients'));
+router.get('/', auth, getPatients);
 
 router.get('/:id', auth, getPatientById);
 

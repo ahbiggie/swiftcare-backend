@@ -1,6 +1,8 @@
+import { Op } from 'sequelize';
 import db from '../models/index.js';
 import ApiError from '../utils/ApiError.js';
 import { ErrorCode } from '../constants/index.js';
+import { normalizePhone } from '../utils/phone.js';
 
 const { Patient } = db;
 
@@ -16,4 +18,26 @@ export async function getById(id, clinicId) {
     }
 
     return patient;
+}
+
+// search by name (partial) or phone (exact, normalized)
+export async function search(clinicId, term, limit, offset) {
+    const where = { clinicId };
+
+    if (term) {
+        where[Op.or] = [
+            { firstName: { [Op.iLike]: `%${term}%` } },
+            { lastName: { [Op.iLike]: `%${term}%` } },
+            { phone: normalizePhone(term) },
+        ];
+    }
+
+    const { rows, count } = await Patient.findAndCountAll({
+        where,
+        limit,
+        offset,
+        order: [['createdAt', 'DESC']],
+    });
+
+    return { patients: rows, total: count };
 }
