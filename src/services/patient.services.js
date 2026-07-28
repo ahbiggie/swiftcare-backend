@@ -3,10 +3,9 @@ import db from '../models/index.js';
 import ApiError from '../utils/ApiError.js';
 import { ErrorCode } from '../constants/index.js';
 import { normalizePhone } from '../utils/phone.js';
+import { isUuid } from '../utils/uuid.js';
 
 const { Patient } = db;
-
-const isUuid = (v) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 
 // clinic-scoped lookup
 export async function getById(id, clinicId) {
