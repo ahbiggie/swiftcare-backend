@@ -17,6 +17,7 @@ router.get("/health", (_req, res) =>
 router.use("/patients", patientRoutes);
 router.use("/queue", queueRoutes);
 router.use("/auth", authRoutes);
+router.use("/vitals", vitalsRoutes);
 
 // Contract lists these under "Auth & Accounts" (section 1), but their actual
 // paths have no /auth prefix — top-level, wired here rather than inside
