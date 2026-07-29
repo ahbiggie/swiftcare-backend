@@ -22,6 +22,7 @@ const db = {
   Appointment,
   QueueEntry,
   QueueStatusEvent,
+  Vitals,
 };
 
 Object.values(db).forEach((model) => {
