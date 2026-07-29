@@ -17,7 +17,7 @@ router.get("/health", (_req, res) =>
 router.use("/patients", patientRoutes);
 router.use("/queue", queueRoutes);
 router.use("/auth", authRoutes);
-router.use("/vitals", vitalsRoutes);
+
 // Contract lists these under "Auth & Accounts" (section 1), but their actual
 // paths have no /auth prefix — top-level, wired here rather than inside
 // auth.routes.js (which is mounted at /auth).
@@ -30,7 +30,6 @@ router.get(
 );
 
 // Lane owners: register yours here.
-//   Lane 2 (Victor)          — router.use('/appointments', appointmentRoutes);
 //   Lane 3 (Emmanuel Alliu)  — router.use('/vitals', vitalsRoutes); router.use('/consultations', consultationRoutes);
 //   Lane 4 (Emmanuel Dosumu) — router.use('/invoices', invoiceRoutes); router.use('/payments', paymentRoutes);
 // Don't forget the .js extension on the import.

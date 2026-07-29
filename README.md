@@ -154,22 +154,27 @@ git push -u origin lane-1-auth
 
 ## Progress
 
-### Working now
+### Where it's running
 
-- **Queue rules**: the full set of allowed steps, including cancelling a visit (which requires a reason). In [transitions.js](src/services/queue/transitions.js), tested in [queue-transitions.test.js](tests/queue-transitions.test.js).
-- **Queue endpoints**: `GET /queue` and `POST /queue/:queueId/status` are live. Every status change is saved with who changed it, when, and why. See [queue.service.js](src/services/queue/queue.service.js) and [queue-routes.test.js](tests/queue-routes.test.js).
-- **Browser access control**: only websites on an approved list can call the API from a browser.
-- **Database tables**: 8 created so far, covering clinics, staff, patients, appointments, and the visit queue.
-- **Models**: 5 of the 10 the full system needs, plus one extra that records queue history.
-- **Tests**: 21 passing on `main`.
+The system is live, not just running on a laptop. The backend (this code) is hosted on Railway, and its database is a separate Postgres server, also hosted on Railway.
 
-### Waiting for review
+### What the system can do today
 
-- **Login and accounts**: clinic signup, login, inviting staff, accepting an invite, and looking up your own account, the staff list, and the doctor list. Finished and tested, sitting in an open pull request.
+- **Set up a clinic and its team.** A clinic can sign up and get an admin account, the admin can invite staff (receptionists, nurses, doctors, cashiers), and invited staff can accept their invite and log in. Anyone logged in can check who they are, and admins can see the full staff list and the list of doctors.
+- **Keep patient records.** A receptionist can search for a patient, look up one patient's full details, register a brand-new patient, and edit a patient's details. If someone tries to register a patient whose phone number already exists in the clinic, the system flags it as a possible duplicate instead of quietly creating a second record for the same person.
+- **Book appointments.** A receptionist can schedule a future visit for a patient with a specific doctor.
+- **Run the live visit queue.** A receptionist can check a patient in, which starts a real, trackable visit. From there, the visit moves step by step — nurse triage, waiting for the doctor, in consultation, waiting for payment, done — and every move is written down: who made it, when, and why. The system won't allow a visit to skip a step, and it won't allow the same patient to be checked in twice at once.
+- **Keep every clinic's information separate.** No clinic can ever see or change another clinic's patients, staff, or visits.
+- **Show its own documentation.** Everything the system can currently do is written up on a documentation page built into the system itself, which can also be used to try each action directly, rather than only being described in a text file.
 
-### Not started
+### Checked and working
 
-- **Patient and appointment endpoints**: the tables and models exist, but the endpoints still return "not implemented".
-- **Checking a patient in**: nothing creates a queue entry yet, so a real visit can't start. Blocked until the patient endpoints work.
-- **Vitals, consultations, prescriptions, invoices, payments**: the remaining 5 models and all their endpoints.
-- **Stopping double-booked appointments**: deliberately left out for now, see `DECISIONS.md`.
+64 automated checks run against the system, and all of them currently pass — covering logging in, managing staff, the visit queue rules, and making sure clinics can't see each other's information.
+
+### Not built yet
+
+- **Recording a patient's vitals** (blood pressure, temperature, weight) when a nurse sees them.
+- **Running the consultation** — the doctor's notes, diagnosis, and prescription, and the bill that gets created from it.
+- **Taking payment** and keeping a record of it.
+- **A summary screen for admins**, showing things like how many patients, how much money has come in, and where visits are getting stuck.
+- **Stopping the same doctor being double-booked** at the same time — left out on purpose for now. The reasoning is written up in `DECISIONS.md`.

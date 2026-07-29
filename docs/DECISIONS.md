@@ -4,7 +4,7 @@ Why the repo looks the way it does. One entry per decision that wasn't obvious, 
 
 The locked API surface lives in [API_CONTRACT.md](API_CONTRACT.md). This file records **implementation** decisions, not contract ones. A change here is a PR. A change to the contract is a PR _there_, first.
 
-**Started:** 2026-07-21 · **Phase:** foundation, pre-lane-work
+**Started:** 2026-07-21 · **Phase:** lane work in progress — Auth and Queue live, Patients/Appointments/Check-in live, documentation live
 
 ---
 
@@ -269,6 +269,32 @@ Closes out contract section 1. No new models or migrations. Everything reads `Cl
 
 **`GET /auth/me`'s response is flat in `data`, unlike login's `{ token, user }`.** Easy to get backwards by pattern-matching the login handler next to it. Asserted directly: `body.data.user` must be `undefined`, and the key set is `{ id, name, role, clinicId }` at the top level. Also asserted for shape parity across account types, same approach as the login checks in D12 and D13: an admin token and a staff token must produce identical key sets from this endpoint, not just correct values.
 
+### D15 · Patients, Appointments, and Queue check-in: built and merged in Victor's absence
+
+Same situation as [D11](#d11--appointment-resolved-and-merged-in-victors-absence). Victor was unavailable, and the four Patients routes (only `GET /patients/:id` existed, and it had one open review comment) plus `POST /appointments` and `POST /queue/check-in` were the actual blocker for the rest of the project — nothing downstream can be tested end-to-end without a patient existing and a visit being able to start. Picked up and finished by someone else rather than left waiting.
+
+**One rule, applied to every new lookup: look the record up, and if it's missing *or* it belongs to a different clinic, give back the exact same "not found."** This was already the rule for patients and queue entries (see D3 and D10); it's now applied identically to appointments, and to the doctor and appointment checks inside check-in. The point is the same every time: someone in one clinic must never be able to tell, from the response they get back, whether a record exists in a *different* clinic.
+
+**Checking a patient in reuses the queue's existing concurrency rule (D5), rather than inventing a new one.** "A patient can't have two visits open at once" is enforced by the database itself — check-in tries to create the visit, and if the database's existing rule rejects it, that rejection is turned into a clean `409` for the caller. Nothing checks "is there already a visit?" first and then hopes nothing changes in between; the database is the thing that actually guarantees it.
+
+**One shared check for "is this really an active doctor in this clinic," used by both appointments and check-in.** Both features need to confirm the same fact before going further. Written once, in the same place the existing doctor-list feature already lived, and imported by both — not typed out twice.
+
+### D16 · A validation fix has to move into a shared file the moment a second place needs it
+
+A patient lookup was found to crash with a server error, instead of giving a clean "not found," when it was asked for something that wasn't shaped like a real id at all (rather than a real id that just didn't match anything). Fixed by checking the shape first. That fix lived inside the one function that needed it at the time.
+
+**The same crash came back twice, in the next two features built afterward.** Appointments and check-in both needed to look patients and doctors up by id too, and both were written the normal way — a lookup, then "if nothing came back, it's not found" — without knowing the earlier fix existed, because it wasn't anywhere they'd think to look. A reviewer caught it both times.
+
+**Moved into one small shared file (`utils/uuid.js`) once it was clear a second caller needed it, and every affected lookup now uses it.** Same lesson as the phone normalizer and the role check: the first time a check exists in only one place is fine, but the moment a second place needs the exact same check, it has to become a shared file that gets imported, not a few lines retyped from memory. A fix that isn't shared is really only a fix for the one spot someone happened to be looking at.
+
+### D17 · Six pieces of related work, built as stacked branches — and where that went wrong
+
+Six pieces of work (the four Patients routes, Appointments, and Queue check-in) were built one after another. Each one was its own branch and its own pull request, and each new branch was started from the *previous* one rather than from `main`, so that reviewing any single piece only showed the change that piece actually made, not everything before it too.
+
+**That part worked as intended.** What went wrong was the order the pull requests were approved and merged in: earliest-built first, through to latest-built last, rather than the other way around. A merge only carries across whatever its target branch contained *at that exact moment* — so merging them in build order meant later merges never flowed back down into the earlier branches, and **none of the six pieces actually reached `main`** until one final pull request pulled the whole finished chain across in a single move.
+
+**Lesson for next time a chain of branches is built this way:** either merge starting from the newest branch and work down to the oldest, so each merge carries everything above it along too, or skip merging the middle branches into each other at all, and only ever open the one pull request that matters — the finished, final branch straight into `main` — once every piece in the chain is done.
+
 ---
 
 ## Shared code
@@ -323,6 +349,12 @@ Committed after seeing git's CRLF warnings on a Windows machine. Mixed-OS teams 
 
 `controllers/`, `migrations/`, `seeders/` are empty. Git doesn't track directories, so without these the structure a lane owner clones wouldn't match the documented layout.
 
+### W4 · Written documentation covers what's real, not what's planned
+
+Added an interactive documentation page (built from short notes written directly above each route, so the notes and the code can't drift apart) once Auth, Queue, Patients, and Appointments were all live.
+
+**Chose to describe only routes that actually work today**, and to leave Vitals, Consultations, and Billing/Payments out entirely rather than describing routes that don't exist yet, or that only return a stub response. A documentation page a reader can try for themselves is only trustworthy if everything on it genuinely works the way it says. `API_CONTRACT.md` remains the place for what's planned but not yet built; this page is for what's actually running. Add a route's notes at the same time the route itself is written — not before, and not as a separate follow-up.
+
 ---
 
 ## Verification record
@@ -375,6 +407,10 @@ The contract says the queue is "shared; called by every lane" without specifying
 
 Flagged during setup as worth settling before the first commit; the current single-file-per-concern layout under `utils/` is a default, not a decision. Fine as-is, but if it's going to change, cheaper now than after four lanes import from it.
 
+### Q5 · Should registering two patients with the same new phone number, at the same moment, be locked?
+
+Raised in review on the patient-registration work, not yet answered. Two people registering a brand-new patient with the same phone number, at the exact same moment, could both pass the "does this phone already exist" check before either one finishes saving — so both go through, and the clinic ends up with two records that should have been flagged as possible duplicates and shown to a receptionist to confirm. The same kind of gap already exists for matching staff email addresses (see D12) and was written down there as an accepted limitation rather than closed. Not yet decided whether to accept this one the same way, or close it with a database-level lock.
+
 ---
 
 ## Deliberately deferred
@@ -383,12 +419,12 @@ Each of these is a deliberate "not yet". The last column says what would make us
 
 | Deferred                                 | Why                                                                                       | Revisit when                                                                                                       |
 | ---------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| 5 of 10 models remain (Vitals, Consultation, Prescription, Invoice, Payment) | Schema is the critical path for Lanes 3 and 4                             | Lane 3 / Lane 4 start                                                                                              |
+| Vitals, Consultation, Prescription, Invoice, Payment models (5 remaining) | Schema is the critical path for Lanes 3 and 4 | Lane 3 / Lane 4 start |
 | Appointment double-booking guard         | Real design question (unique index vs. overlap check) the contract doesn't mandate for v1 | Before appointments carries real scheduling weight; see [D11](#d11--appointment-resolved-and-merged-in-victors-absence) |
-| `assertCanTransition` implementation     | Lane 1's work, not the scaffold's                                                         | Lane 1 starts                                                                                                      |
-| Concurrent-duplicate lock (phone-scoped) | Post-MVP per the contract; residual duplicates handled administratively                   | Real concurrent load                                                                                               |
-| Tests                                    | ~~No framework installed~~ **In use.** `node --test` (zero-dep), 20 tests: transition guard, CORS, and DB-touching queue route coverage | Broaden as each lane's handlers land                     |
+| `assertCanTransition` implementation     | ~~Lane 1's work, not the scaffold's~~ **Done, see [D8](#d8--queue-cancellation-a-terminal-status-note-required-admin-included).** | Nothing left |
+| Concurrent-duplicate lock, phone (patients) and email (staff) | Post-MVP for phone per the contract; accepted the same way for email in D12; see [Q5](#q5--should-registering-two-patients-with-the-same-new-phone-number-at-the-same-moment-be-locked) | Real concurrent load |
+| Automated tests for Patients / Appointments / Queue check-in | Built under time pressure to unblock the rest of the project; no matching tests written alongside it | Before this code is trusted for real traffic — same style as `tests/queue-routes.test.js` |
 | Linting                                  | An `eslint-disable` comment already exists with no ESLint; mild inconsistency, accepted  | Team agrees on a style                                                                                             |
-| CI                                       | Nothing to run without tests                                                              | Tests exist                                                                                                        |
+| CI                                       | ~~Nothing to run without tests~~ **Tests now exist — 64 of them.** Nothing runs them automatically yet | Now — this is the next natural step, not blocked on anything |
 | `CONTRIBUTING.md` + PR template          | Branch naming and PR expectations currently live only in the README                       | Before lanes branch                                                                                                |
 | CORS (Lane 1 / `app.js`)                 | ~~Not in `app.js` today~~ **Done, see [D9](#d9--cors-env-driven-allow-list-rejection-routed-through-apierror).** Env-driven allow-list, `403 FORBIDDEN_ORIGIN`, now in the contract's Conventions | Nothing left |
