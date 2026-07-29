@@ -1,67 +1,64 @@
-import { DataTypes, Model } from "sequelize";
-import { sequelize } from "../config/database.js";
+import { DataTypes } from "sequelize";
 
-class Vitals extends Model {}
+export default (sequelize) => {
+  const Vitals = sequelize.define(
+    "Vitals",
+    {
+      id: {
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true,
+      },
+      clinicId: { type: DataTypes.UUID, allowNull: false },
+      queueEntryId: { type: DataTypes.UUID, allowNull: false },
+      patientId: { type: DataTypes.UUID, allowNull: false },
+      bpSystolic: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        validate: { min: 40, max: 300 },
+      },
+      bpDiastolic: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        validate: { min: 20, max: 200 },
+      },
+      temperature: {
+        type: DataTypes.FLOAT, // Celsius
+        allowNull: false,
+        validate: { min: 25, max: 45 },
+      },
+      weight: {
+        type: DataTypes.FLOAT, // kg
+        allowNull: false,
+        validate: { min: 0 },
+      },
+      recordedBy: { type: DataTypes.UUID, allowNull: false },
+      recordedAt: {
+        type: DataTypes.DATE,
+        allowNull: false,
+        defaultValue: DataTypes.NOW,
+      },
+    },
+    {
+      tableName: "vitals",
+      updatedAt: false,
+      indexes: [
+        // Hot path: GET /vitals/:patientId, optionally narrowed by queueEntryId.
+        { fields: ["patientId", "queueEntryId"] },
+        { fields: ["clinicId"] },
+      ],
+    },
+  );
 
-Vitals.init(
-  {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true,
-    },
-    queueEntryId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      field: "queue_entry_id",
-    },
-    patientId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      field: "patient_id",
-    },
-    bpSystolic: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-      field: "bp_systolic",
-      validate: { min: 40, max: 300 },
-    },
-    bpDiastolic: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-      field: "bp_diastolic",
-      validate: { min: 20, max: 200 },
-    },
-    temperature: {
-      type: DataTypes.FLOAT, // Celsius
-      allowNull: false,
-      validate: { min: 25, max: 45 },
-    },
-    weight: {
-      type: DataTypes.FLOAT, // kg
-      allowNull: false,
-      validate: { min: 0 },
-    },
-    recordedBy: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      field: "recorded_by",
-    },
-    recordedAt: {
-      type: DataTypes.DATE,
-      allowNull: false,
-      defaultValue: DataTypes.NOW,
-      field: "recorded_at",
-    },
-  },
-  {
-    sequelize,
-    modelName: "Vitals",
-    tableName: "vitals",
-    underscored: true,
-    timestamps: true,
-    indexes: [{ fields: ["patient_id", "queue_entry_id"] }],
-  },
-);
+  Vitals.associate = (db) => {
+    Vitals.belongsTo(db.Clinic, { foreignKey: "clinicId" });
+    Vitals.belongsTo(db.Patient, { foreignKey: "patientId" });
+    Vitals.belongsTo(db.QueueEntry, { foreignKey: "queueEntryId" });
+    Vitals.belongsTo(db.Staff, {
+      as: "recordedByStaff",
+      foreignKey: "recordedBy",
+    });
+  };
 
-export default Vitals;
+  return Vitals;
+};
