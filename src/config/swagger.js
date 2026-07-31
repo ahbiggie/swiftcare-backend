@@ -26,6 +26,7 @@ const definition = {
     { name: 'Patients', description: 'Patient records, clinic-scoped' },
     { name: 'Appointments', description: 'Scheduled future visits' },
     { name: 'Queue', description: 'The live, in-progress visit queue' },
+    { name: 'Vitals', description: 'Vital signs recorded during a visit' },
   ],
   security: [{ bearerAuth: [] }],
   components: {
@@ -194,6 +195,33 @@ const definition = {
         properties: {
           id: { type: 'string', format: 'uuid' },
           name: { type: 'string' },
+        },
+      },
+      Vitals: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          clinicId: { type: 'string', format: 'uuid' },
+          queueEntryId: { type: 'string', format: 'uuid' },
+          patientId: { type: 'string', format: 'uuid' },
+          bpSystolic: { type: 'integer', example: 120 },
+          bpDiastolic: { type: 'integer', example: 80 },
+          temperature: { type: 'number', format: 'float', description: 'Celsius', example: 37.0 },
+          weight: { type: 'number', format: 'float', description: 'kg', example: 68.5 },
+          recordedBy: { type: 'string', format: 'uuid' },
+          recordedAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      VitalsInput: {
+        type: 'object',
+        required: ['queueEntryId', 'patientId', 'bpSystolic', 'bpDiastolic', 'temperature', 'weight'],
+        properties: {
+          queueEntryId: { type: 'string', format: 'uuid' },
+          patientId: { type: 'string', format: 'uuid' },
+          bpSystolic: { type: 'integer', example: 120 },
+          bpDiastolic: { type: 'integer', example: 80 },
+          temperature: { type: 'number', format: 'float', description: 'Celsius', example: 37.0 },
+          weight: { type: 'number', format: 'float', description: 'kg', example: 68.5 },
         },
       },
     },
