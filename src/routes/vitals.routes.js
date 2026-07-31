@@ -6,7 +6,7 @@ import { postVitals, getVitals } from "../controllers/vitals.controller.js";
 
 const router = Router();
 
-router.post("/", auth, authorize(Role.NURSE), postVitals);
+router.post("/", auth, authorize(Role.NURSE, Role.DOCTOR), postVitals);
 router.get(
   "/:patientId",
   auth,
