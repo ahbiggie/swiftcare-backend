@@ -52,15 +52,15 @@ New to this API? Read this section top to bottom, then use the route sections be
 Local development server:
 
 ```
-http://localhost:4000/api
+http://localhost:3000/api
 ```
 
-- **Port `4000`** comes from `PORT` in `.env.example`. If you override `PORT` in your own `.env`, substitute it.
+- **Port `3000`** comes from `PORT` in `.env.example`. If you override `PORT` in your own `.env`, substitute it.
 - **Prefix `/api`** comes from `app.use('/api', routes)` in `src/app.js`. Every route in this contract is mounted under it.
 
 **The rule:** take any `METHOD /path` from the route sections below and prepend the base URL.
 
-> `POST /auth/login` (section 1)  →  `POST http://localhost:4000/api/auth/login`
+> `POST /auth/login` (section 1) → `POST http://localhost:3000/api/auth/login`
 
 ### Authentication flow
 
@@ -113,7 +113,7 @@ Content-Type: application/json
 {
   "success": true,
   "data": {
-    "id": "pat_3f2a…",   // this is the patientId used everywhere below
+    "id": "pat_3f2a…", // this is the patientId used everywhere below
     "firstName": "Ada",
     "lastName": "Okafor",
     "phone": "08031234567",
@@ -129,7 +129,7 @@ Content-Type: application/json
 
 ```json
 {
-  "patientId": "pat_3f2a…",        // from step 1
+  "patientId": "pat_3f2a…", // from step 1
   "assignedDoctorId": "usr_doc_77…"
 }
 ```
@@ -139,7 +139,7 @@ Content-Type: application/json
 {
   "success": true,
   "data": {
-    "queueId": "q_9b8c…",   // the visit, same value as queueEntryId below
+    "queueId": "q_9b8c…", // the visit, same value as queueEntryId below
     "status": "Checked-In"
   }
 }
@@ -149,12 +149,12 @@ Content-Type: application/json
 
 ```jsonc
 {
-  "queueEntryId": "q_9b8c…",   // the queueId from step 2
-  "patientId": "pat_3f2a…",    // from step 1
+  "queueEntryId": "q_9b8c…", // the queueId from step 2
+  "patientId": "pat_3f2a…", // from step 1
   "bpSystolic": 120,
   "bpDiastolic": 80,
   "temperature": 36.8,
-  "weight": 72
+  "weight": 72,
 }
 ```
 
@@ -170,8 +170,8 @@ Content-Type: application/json
     "temperature": 36.8,
     "weight": 72,
     "recordedBy": "usr_nurse_12…",
-    "recordedAt": "2026-07-22T09:15:00Z"
-  }
+    "recordedAt": "2026-07-22T09:15:00Z",
+  },
 }
 ```
 
@@ -186,7 +186,11 @@ Content-Type: application/json
 // 200 OK
 {
   "success": true,
-  "data": { "queueId": "q_9b8c…", "status": "Triage Ready", "lastUpdatedBy": "usr_nurse_12…" }
+  "data": {
+    "queueId": "q_9b8c…",
+    "status": "Triage Ready",
+    "lastUpdatedBy": "usr_nurse_12…"
+  }
 }
 ```
 
@@ -200,7 +204,11 @@ Content-Type: application/json
 // 200 OK
 {
   "success": true,
-  "data": { "queueId": "q_9b8c…", "status": "Awaiting Doctor", "lastUpdatedBy": "usr_nurse_12…" }
+  "data": {
+    "queueId": "q_9b8c…",
+    "status": "Awaiting Doctor",
+    "lastUpdatedBy": "usr_nurse_12…"
+  }
 }
 ```
 
@@ -214,11 +222,15 @@ Content-Type: application/json
 // 200 OK
 {
   "success": true,
-  "data": { "queueId": "q_9b8c…", "status": "In Consultation", "lastUpdatedBy": "usr_doc_77…" }
+  "data": {
+    "queueId": "q_9b8c…",
+    "status": "In Consultation",
+    "lastUpdatedBy": "usr_doc_77…"
+  }
 }
 ```
 
-This is the move that puts the visit in front of the doctor per the [queue rulebook](#queue-rulebook). It's what `Awaiting Doctor` in step 6's *name* refers to, and it must happen before the consultation is started below.
+This is the move that puts the visit in front of the doctor per the [queue rulebook](#queue-rulebook). It's what `Awaiting Doctor` in step 6's _name_ refers to, and it must happen before the consultation is started below.
 
 **Step 7. Run the consultation** · `POST /consultations` then `POST /consultations/:id/complete` (section 6) · role: `doctor`
 
@@ -227,7 +239,7 @@ Completing needs a consultation `id`, so start one first:
 ```json
 // POST http://localhost:4000/api/consultations
 {
-  "queueEntryId": "q_9b8c…",   // same visit
+  "queueEntryId": "q_9b8c…", // same visit
   "patientId": "pat_3f2a…"
 }
 ```
@@ -237,7 +249,7 @@ Completing needs a consultation `id`, so start one first:
 {
   "success": true,
   "data": {
-    "id": "cons_5d4e…",   // the :id for the complete call
+    "id": "cons_5d4e…", // the :id for the complete call
     "queueEntryId": "q_9b8c…",
     "patientId": "pat_3f2a…",
     "status": "in_progress"
@@ -253,7 +265,12 @@ Then complete it. This one call writes notes + diagnosis + prescriptions, create
   "notes": "Mild fever, advised rest and fluids.",
   "diagnosis": "Viral upper respiratory infection",
   "prescriptions": [
-    { "drugName": "Paracetamol", "dosage": "500mg", "frequency": "twice daily", "duration": "5 days" }
+    {
+      "drugName": "Paracetamol",
+      "dosage": "500mg",
+      "frequency": "twice daily",
+      "duration": "5 days"
+    }
   ]
 }
 ```
@@ -264,7 +281,7 @@ Then complete it. This one call writes notes + diagnosis + prescriptions, create
   "success": true,
   "data": {
     "consultation": { "id": "cons_5d4e…", "status": "Completed" },
-    "invoice": { "id": "inv_1a2b…", "status": "Pending" },   // invoiceId for step 8
+    "invoice": { "id": "inv_1a2b…", "status": "Pending" }, // invoiceId for step 8
     "queueStatus": "Awaiting Payment"
   }
 }
@@ -274,7 +291,7 @@ Then complete it. This one call writes notes + diagnosis + prescriptions, create
 
 ```json
 {
-  "invoiceId": "inv_1a2b…",   // from step 7's complete response
+  "invoiceId": "inv_1a2b…", // from step 7's complete response
   "method": "cash"
 }
 ```
@@ -285,7 +302,7 @@ Then complete it. This one call writes notes + diagnosis + prescriptions, create
   "success": true,
   "data": {
     "payment": { "id": "pay_8c7d…" },
-    "receipt": { },            // data, not a PDF
+    "receipt": {}, // data, not a PDF
     "queueStatus": "Completed"
   }
 }
@@ -339,15 +356,15 @@ Browser clients must call from an allowed origin. The server reads a comma-separ
 
 ### Status codes
 
-| Code | Meaning |
-| --- | --- |
-| `200` | OK |
-| `201` | Created |
-| `400` | Validation error |
-| `401` | Unauthenticated |
+| Code  | Meaning            |
+| ----- | ------------------ |
+| `200` | OK                 |
+| `201` | Created            |
+| `400` | Validation error   |
+| `401` | Unauthenticated    |
 | `403` | Role not permitted |
-| `404` | Not found |
-| `409` | Conflict |
+| `404` | Not found          |
+| `409` | Conflict           |
 
 ### IDs
 
@@ -374,33 +391,33 @@ Active = any status except `Completed` or `Cancelled`. `POST /queue/check-in` re
 
 Backed by a single `constants.js`.
 
-| Enum | Values |
-| --- | --- |
-| Queue status | `Checked-In` · `Triage Ready` · `Awaiting Doctor` · `In Consultation` · `Awaiting Payment` · `Completed` · `Cancelled` |
-| Role | `admin` · `receptionist` · `nurse` · `doctor` · `cashier` |
-| Payment method | `cash` · `mobile_money` · `insurance` |
-| Appointment status | `Scheduled` · `Cancelled` · `Completed` |
-| Invoice status | `Pending` · `Paid` |
-| Staff status | `invited` · `active` |
+| Enum               | Values                                                                                                                 |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| Queue status       | `Checked-In` · `Triage Ready` · `Awaiting Doctor` · `In Consultation` · `Awaiting Payment` · `Completed` · `Cancelled` |
+| Role               | `admin` · `receptionist` · `nurse` · `doctor` · `cashier`                                                              |
+| Payment method     | `cash` · `mobile_money` · `insurance`                                                                                  |
+| Appointment status | `Scheduled` · `Cancelled` · `Completed`                                                                                |
+| Invoice status     | `Pending` · `Paid`                                                                                                     |
+| Staff status       | `invited` · `active`                                                                                                   |
 
 ---
 
 ## Error code catalog
 
-| Code | HTTP | When |
-| --- | --- | --- |
-| `VALIDATION_ERROR` | 400 | Bad or missing fields |
-| `UNAUTHENTICATED` | 401 | No or invalid token |
-| `FORBIDDEN_ROLE` | 403 | Role not allowed |
-| `FORBIDDEN_ORIGIN` | 403 | Browser origin not in the CORS allow-list |
-| `INVITE_NOT_ACCEPTED` | 403 | Login attempted before the invite was accepted |
-| `NOT_FOUND` | 404 | Resource missing |
-| `DUPLICATE_EMAIL` | 409 | Email already registered to a clinic or staff account |
-| `DUPLICATE_PATIENT` | 409 | Possible phone match, awaiting confirmation |
-| `QUEUE_ILLEGAL_TRANSITION` | 409 | Move is not in the rulebook |
-| `QUEUE_ALREADY_CHECKED_IN` | 409 | Patient already has an active visit |
-| `INVOICE_ALREADY_PAID` | 409 | Double payment blocked |
-| `PAYMENT_NOT_DUE` | 409 | Patient is not at `Awaiting Payment` |
+| Code                       | HTTP | When                                                  |
+| -------------------------- | ---- | ----------------------------------------------------- |
+| `VALIDATION_ERROR`         | 400  | Bad or missing fields                                 |
+| `UNAUTHENTICATED`          | 401  | No or invalid token                                   |
+| `FORBIDDEN_ROLE`           | 403  | Role not allowed                                      |
+| `FORBIDDEN_ORIGIN`         | 403  | Browser origin not in the CORS allow-list             |
+| `INVITE_NOT_ACCEPTED`      | 403  | Login attempted before the invite was accepted        |
+| `NOT_FOUND`                | 404  | Resource missing                                      |
+| `DUPLICATE_EMAIL`          | 409  | Email already registered to a clinic or staff account |
+| `DUPLICATE_PATIENT`        | 409  | Possible phone match, awaiting confirmation           |
+| `QUEUE_ILLEGAL_TRANSITION` | 409  | Move is not in the rulebook                           |
+| `QUEUE_ALREADY_CHECKED_IN` | 409  | Patient already has an active visit                   |
+| `INVOICE_ALREADY_PAID`     | 409  | Double payment blocked                                |
+| `PAYMENT_NOT_DUE`          | 409  | Patient is not at `Awaiting Payment`                  |
 
 ---
 
@@ -408,13 +425,13 @@ Backed by a single `constants.js`.
 
 Questions about a specific area of the API? Contact the person listed. This is a directory of who to ask, not a work-assignment chart.
 
-| Resource | Contact |
-| --- | --- |
-| Auth & accounts (incl. `GET /staff/doctors`) | Shaibu (Lane 1) |
-| Queue and its rules (shared; called by every lane) | Shaibu (Lane 1) |
-| Patients · Appointments & check-in | Victor (Lane 2) |
-| Vitals · Consultations & prescriptions | Emmanuel Alliu (Lane 3) |
-| Billing & payments · Dashboard & audit | Emmanuel Dosumu (Lane 4) |
+| Resource                                           | Contact                  |
+| -------------------------------------------------- | ------------------------ |
+| Auth & accounts (incl. `GET /staff/doctors`)       | Shaibu (Lane 1)          |
+| Queue and its rules (shared; called by every lane) | Shaibu (Lane 1)          |
+| Patients · Appointments & check-in                 | Victor (Lane 2)          |
+| Vitals · Consultations & prescriptions             | Emmanuel Alliu (Lane 3)  |
+| Billing & payments · Dashboard & audit             | Emmanuel Dosumu (Lane 4) |
 
 ---
 
@@ -422,14 +439,14 @@ Questions about a specific area of the API? Contact the person listed. This is a
 
 `POST /queue/:queueId/status` is the **only** way a status changes.
 
-| From | To | Role |
-| --- | --- | --- |
-| `Checked-In` | `Triage Ready` | Nurse |
-| `Triage Ready` | `Awaiting Doctor` | Nurse |
-| `Awaiting Doctor` | `In Consultation` | Doctor |
-| `In Consultation` | `Awaiting Payment` | Doctor (automatic on consult complete) |
-| `Awaiting Payment` | `Completed` | Cashier (automatic on payment) |
-| `Checked-In` | `Cancelled` | Receptionist (**`note` required**) |
+| From               | To                 | Role                                   |
+| ------------------ | ------------------ | -------------------------------------- |
+| `Checked-In`       | `Triage Ready`     | Nurse                                  |
+| `Triage Ready`     | `Awaiting Doctor`  | Nurse                                  |
+| `Awaiting Doctor`  | `In Consultation`  | Doctor                                 |
+| `In Consultation`  | `Awaiting Payment` | Doctor (automatic on consult complete) |
+| `Awaiting Payment` | `Completed`        | Cashier (automatic on payment)         |
+| `Checked-In`       | `Cancelled`        | Receptionist (**`note` required**)     |
 
 No backward moves, no skipping. `admin` overrides any transition, except the `note` requirement. That is about record-keeping, not permission.
 
@@ -465,15 +482,15 @@ In the tables below, **MUST** means it ships in v1 and **DEFER** means it comes 
 
 ### 1. Auth & accounts · Lane 1 (Shaibu)
 
-| Method | Path | Priority | Access |
-| --- | --- | --- | --- |
-| `POST` | `/auth/clinic/signup` | MUST | Public |
-| `POST` | `/auth/login` | MUST | Public |
-| `POST` | `/auth/invite` | MUST | `admin` |
-| `POST` | `/auth/accept-invite` | MUST | Public (invite token) |
-| `GET` | `/auth/me` | MUST | Any signed-in user |
-| `GET` | `/users` | MUST | `admin` |
-| `GET` | `/staff/doctors` | MUST | `receptionist`, `nurse`, `admin` |
+| Method | Path                  | Priority | Access                           |
+| ------ | --------------------- | -------- | -------------------------------- |
+| `POST` | `/auth/clinic/signup` | MUST     | Public                           |
+| `POST` | `/auth/login`         | MUST     | Public                           |
+| `POST` | `/auth/invite`        | MUST     | `admin`                          |
+| `POST` | `/auth/accept-invite` | MUST     | Public (invite token)            |
+| `GET`  | `/auth/me`            | MUST     | Any signed-in user               |
+| `GET`  | `/users`              | MUST     | `admin`                          |
+| `GET`  | `/staff/doctors`      | MUST     | `receptionist`, `nurse`, `admin` |
 
 **`POST /auth/clinic/signup`**
 Body `{ clinicName, address, email, password }` → `{ token, clinic, user: { role: "admin" } }`
@@ -499,12 +516,12 @@ Query `?role=&status=&page=&limit=` → `{ users, total }`
 
 ### 2. Patients · Lane 2 (Victor)
 
-| Method | Path | Priority | Access |
-| --- | --- | --- | --- |
-| `GET` | `/patients` | MUST | All staff |
-| `GET` | `/patients/:id` | MUST | All staff |
-| `POST` | `/patients` | MUST | `receptionist`, `admin` |
-| `PUT` | `/patients/:id` | MUST | `receptionist`, `admin` |
+| Method | Path            | Priority | Access                  |
+| ------ | --------------- | -------- | ----------------------- |
+| `GET`  | `/patients`     | MUST     | All staff               |
+| `GET`  | `/patients/:id` | MUST     | All staff               |
+| `POST` | `/patients`     | MUST     | `receptionist`, `admin` |
+| `PUT`  | `/patients/:id` | MUST     | `receptionist`, `admin` |
 
 **`GET /patients`**
 Query `?search=&page=&limit=` → `{ patients, total }`
@@ -517,12 +534,12 @@ Body `{ firstName, lastName, phone, gender, dob, confirmNewPatient? }` → `201`
 
 ### 3. Appointments & check-in · Lane 2 (Victor)
 
-| Method | Path | Priority | Access |
-| --- | --- | --- | --- |
-| `POST` | `/appointments` | MUST | `receptionist`, `admin` |
-| `PUT` | `/appointments/:id` | DEFER | `receptionist`, `admin` |
-| `DELETE` | `/appointments/:id` | DEFER | `receptionist`, `admin` |
-| `POST` | `/queue/check-in` | MUST | `receptionist`, `admin` |
+| Method   | Path                | Priority | Access                  |
+| -------- | ------------------- | -------- | ----------------------- |
+| `POST`   | `/appointments`     | MUST     | `receptionist`, `admin` |
+| `PUT`    | `/appointments/:id` | DEFER    | `receptionist`, `admin` |
+| `DELETE` | `/appointments/:id` | DEFER    | `receptionist`, `admin` |
+| `POST`   | `/queue/check-in`   | MUST     | `receptionist`, `admin` |
 
 **`POST /appointments`**
 Body `{ patientId, doctorId, date, time }` → appointment with `status: "Scheduled"`
@@ -535,10 +552,10 @@ Body `{ patientId, appointmentId?, assignedDoctorId }` → `201 { queueId, statu
 
 ### 4. Queue · Lane 1 (Shaibu, shared)
 
-| Method | Path | Priority | Access |
-| --- | --- | --- | --- |
-| `GET` | `/queue` | MUST | All staff |
-| `POST` | `/queue/:queueId/status` | MUST | Per [queue rulebook](#queue-rulebook) |
+| Method | Path                     | Priority | Access                                |
+| ------ | ------------------------ | -------- | ------------------------------------- |
+| `GET`  | `/queue`                 | MUST     | All staff                             |
+| `POST` | `/queue/:queueId/status` | MUST     | Per [queue rulebook](#queue-rulebook) |
 
 **`GET /queue`**
 Query `?status=&assignedDoctorId=` → `{ queue: [...] }`
@@ -555,10 +572,10 @@ Body `{ status, note? }` → `{ queueId, status, lastUpdatedBy }`
 
 ### 5. Vitals · Lane 3 (Emmanuel Alliu)
 
-| Method | Path | Priority | Access |
-| --- | --- | --- | --- |
-| `POST` | `/vitals` | MUST | `nurse` |
-| `GET` | `/vitals/:patientId` | MUST | `nurse`, `doctor`, `admin` |
+| Method | Path                 | Priority | Access                     |
+| ------ | -------------------- | -------- | -------------------------- |
+| `POST` | `/vitals`            | MUST     | `nurse`                    |
+| `GET`  | `/vitals/:patientId` | MUST     | `nurse`, `doctor`, `admin` |
 
 **`POST /vitals`**
 Body `{ queueEntryId, patientId, bpSystolic, bpDiastolic, temperature, weight }` → `201`
@@ -571,11 +588,11 @@ Query `?queueEntryId=`
 
 ### 6. Consultations & prescriptions · Lane 3 (Emmanuel Alliu)
 
-| Method | Path | Priority | Access |
-| --- | --- | --- | --- |
-| `POST` | `/consultations` | MUST | `doctor` |
-| `POST` | `/consultations/:id/complete` | MUST | `doctor` |
-| `GET` | `/consultations/:patientId` | MUST | `doctor`, `nurse` (read), `admin` |
+| Method | Path                          | Priority | Access                            |
+| ------ | ----------------------------- | -------- | --------------------------------- |
+| `POST` | `/consultations`              | MUST     | `doctor`                          |
+| `POST` | `/consultations/:id/complete` | MUST     | `doctor`                          |
+| `GET`  | `/consultations/:patientId`   | MUST     | `doctor`, `nurse` (read), `admin` |
 
 **`POST /consultations`**
 Body `{ queueEntryId, patientId }` → consultation with `status: "in_progress"`
@@ -588,8 +605,13 @@ Body:
   "notes": "...",
   "diagnosis": "...",
   "prescriptions": [
-    { "drugName": "...", "dosage": "...", "frequency": "...", "duration": "..." }
-  ]
+    {
+      "drugName": "...",
+      "dosage": "...",
+      "frequency": "...",
+      "duration": "...",
+    },
+  ],
 }
 ```
 
@@ -604,11 +626,11 @@ Query `?queueEntryId=`
 
 ### 7. Billing & payments · Lane 4 (Emmanuel Dosumu)
 
-| Method | Path | Priority | Access |
-| --- | --- | --- | --- |
-| `GET` | `/invoices/:patientId` | MUST | `cashier`, `doctor` (read), `admin` |
-| `POST` | `/payments` | MUST | `cashier` |
-| `GET` | `/payments/history` | MUST | `cashier`, `admin` |
+| Method | Path                   | Priority | Access                              |
+| ------ | ---------------------- | -------- | ----------------------------------- |
+| `GET`  | `/invoices/:patientId` | MUST     | `cashier`, `doctor` (read), `admin` |
+| `POST` | `/payments`            | MUST     | `cashier`                           |
+| `GET`  | `/payments/history`    | MUST     | `cashier`, `admin`                  |
 
 **`GET /invoices/:patientId`**
 Query `?queueEntryId=`
@@ -628,9 +650,9 @@ Query `?date=&method=&page=&limit=`
 
 ### 8. Dashboard & admin · Lane 4 (Emmanuel Dosumu)
 
-| Method | Path | Priority | Access |
-| --- | --- | --- | --- |
-| `GET` | `/dashboard` | DEFER | `admin` |
-| `GET` | `/audit-logs` | DEFER | `admin` |
+| Method | Path          | Priority | Access  |
+| ------ | ------------- | -------- | ------- |
+| `GET`  | `/dashboard`  | DEFER    | `admin` |
+| `GET`  | `/audit-logs` | DEFER    | `admin` |
 
 **`GET /dashboard`** → `{ patientCount, revenue, queueBottlenecks }`
