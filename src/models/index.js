@@ -6,6 +6,8 @@ import defineAppointment from "./appointment.js";
 import defineQueueEntry from "./queueEntry.js";
 import defineQueueStatusEvent from "./queueStatusEvent.js";
 import defineVitals from "./vitals.js";
+import defineConsultation from "./consultation.js";
+import definePrescription from "./prescription.js";
 
 const Patient = definePatient(sequelize);
 const Clinic = defineClinic(sequelize);
@@ -14,6 +16,8 @@ const Appointment = defineAppointment(sequelize);
 const QueueEntry = defineQueueEntry(sequelize);
 const QueueStatusEvent = defineQueueStatusEvent(sequelize);
 const Vitals = defineVitals(sequelize);
+const Consultation = defineConsultation(sequelize);
+const Prescription = definePrescription(sequelize);
 
 const db = {
   Patient,
@@ -23,6 +27,8 @@ const db = {
   QueueEntry,
   QueueStatusEvent,
   Vitals,
+  Consultation,
+  Prescription,
 };
 
 Object.values(db).forEach((model) => {
