@@ -36,6 +36,9 @@ const router = Router();
  *       404:
  *         description: Queue entry not found / not in this clinic
  *         content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+ *       409:
+ *         description: Queue entry isn't In Consultation yet
+ *         content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
  */
 router.post("/", auth, authorize(Role.DOCTOR), postConsultation);
 

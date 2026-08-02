@@ -1,6 +1,6 @@
 import db from "../../models/index.js";
 import ApiError from "../../utils/ApiError.js";
-import { ErrorCode, ConsultationStatus } from "../../constants/index.js";
+import { ErrorCode, ConsultationStatus, QueueStatus } from "../../constants/index.js";
 import { isUuid } from "../../utils/uuid.js";
 
 const { Consultation, Patient, QueueEntry } = db;
@@ -18,6 +18,17 @@ export async function openConsultation({ clinicId, queueEntryId, patientId, doct
       : null;
   if (!queueEntry) {
     throw new ApiError(404, ErrorCode.NOT_FOUND, "Queue entry not found");
+  }
+
+  // Per the queue rulebook, a consultation can't start until the doctor has
+  // advanced the visit to In Consultation (Awaiting Doctor -> In Consultation).
+  // Skipping straight from an earlier status would bypass that required move.
+  if (queueEntry.status !== QueueStatus.IN_CONSULTATION) {
+    throw new ApiError(
+      409,
+      ErrorCode.QUEUE_ILLEGAL_TRANSITION,
+      "Queue entry must be In Consultation before a consultation can be opened.",
+    );
   }
 
   return Consultation.create({
