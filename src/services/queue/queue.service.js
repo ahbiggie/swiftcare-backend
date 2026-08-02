@@ -56,8 +56,11 @@ export async function checkIn({ clinicId, patientId, appointmentId, assignedDoct
   return { queueId: entry.id, status: entry.status };
 }
 
-export function changeStatus({ queueId, actor, status, note }) {
-  return sequelize.transaction(async (t) => {
+// `transaction` lets a caller that already holds one (e.g. consultation
+// complete) fold this move into it, so the queue transition commits or rolls
+// back atomically with the rest of that operation instead of on its own.
+export function changeStatus({ queueId, actor, status, note, transaction }) {
+  const run = async (t) => {
 
     const entry = await QueueEntry.findByPk(queueId, { transaction: t, lock: t.LOCK.UPDATE });
 
@@ -82,5 +85,7 @@ export function changeStatus({ queueId, actor, status, note }) {
     );
 
     return { queueId: entry.id, status: entry.status, lastUpdatedBy: entry.lastUpdatedBy };
-  });
+  };
+
+  return transaction ? run(transaction) : sequelize.transaction(run);
 }
