@@ -1,5 +1,6 @@
 import {
   openConsultation,
+  completeConsultation,
   getConsultationsForPatient,
 } from "../services/consultation/consultation.service.js";
 import { ok, created } from "../utils/response.js";
@@ -14,6 +15,23 @@ export async function postConsultation(req, res, next) {
       doctorId: req.user.id,
     });
     return created(res, consultation);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function postCompleteConsultation(req, res, next) {
+  try {
+    const { notes, diagnosis, prescriptions } = req.body || {};
+    const result = await completeConsultation({
+      clinicId: req.user.clinicId,
+      consultationId: req.params.id,
+      doctorId: req.user.id,
+      notes,
+      diagnosis,
+      prescriptions,
+    });
+    return ok(res, result);
   } catch (err) {
     return next(err);
   }

@@ -246,6 +246,27 @@ const definition = {
           patientId: { type: 'string', format: 'uuid' },
         },
       },
+      PrescriptionInput: {
+        type: 'object',
+        required: ['drugName', 'dosage', 'frequency', 'duration'],
+        properties: {
+          drugName: { type: 'string', example: 'Paracetamol' },
+          dosage: { type: 'string', example: '500mg' },
+          frequency: { type: 'string', example: 'twice daily' },
+          duration: { type: 'string', example: '5 days' },
+        },
+      },
+      CompleteConsultationInput: {
+        type: 'object',
+        properties: {
+          notes: { type: 'string' },
+          diagnosis: { type: 'string' },
+          prescriptions: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/PrescriptionInput' },
+          },
+        },
+      },
     },
     responses: {
       Unauthenticated: {

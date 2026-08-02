@@ -41,6 +41,10 @@ export const ConsultationStatus = {
   COMPLETED: 'completed',
 };
 
+// Per Q3 in docs/DECISIONS.md: a flat constant, not a per-clinic setting or
+// config value. Revisit if the contract ever calls for per-clinic pricing.
+export const CONSULTATION_FEE = 5000;
+
 export const StaffStatus = {
   INVITED: 'invited',
   ACTIVE: 'active',
@@ -57,6 +61,7 @@ export const ErrorCode = {
   DUPLICATE_PATIENT: 'DUPLICATE_PATIENT',
   QUEUE_ILLEGAL_TRANSITION: 'QUEUE_ILLEGAL_TRANSITION',
   QUEUE_ALREADY_CHECKED_IN: 'QUEUE_ALREADY_CHECKED_IN',
+  CONSULTATION_ALREADY_COMPLETED: 'CONSULTATION_ALREADY_COMPLETED',
   INVOICE_ALREADY_PAID: 'INVOICE_ALREADY_PAID',
   PAYMENT_NOT_DUE: 'PAYMENT_NOT_DUE',
 };
