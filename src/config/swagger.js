@@ -27,6 +27,7 @@ const definition = {
     { name: 'Appointments', description: 'Scheduled future visits' },
     { name: 'Queue', description: 'The live, in-progress visit queue' },
     { name: 'Vitals', description: 'Vital signs recorded during a visit' },
+    { name: 'Consultations', description: 'Doctor consultations and prescriptions' },
   ],
   security: [{ bearerAuth: [] }],
   components: {
@@ -222,6 +223,27 @@ const definition = {
           bpDiastolic: { type: 'integer', example: 80 },
           temperature: { type: 'number', format: 'float', description: 'Celsius', example: 37.0 },
           weight: { type: 'number', format: 'float', description: 'kg', example: 68.5 },
+        },
+      },
+      Consultation: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          clinicId: { type: 'string', format: 'uuid' },
+          queueEntryId: { type: 'string', format: 'uuid' },
+          patientId: { type: 'string', format: 'uuid' },
+          doctorId: { type: 'string', format: 'uuid' },
+          notes: { type: 'string', nullable: true },
+          diagnosis: { type: 'string', nullable: true },
+          status: { type: 'string', enum: ['in_progress', 'completed'] },
+        },
+      },
+      ConsultationInput: {
+        type: 'object',
+        required: ['queueEntryId', 'patientId'],
+        properties: {
+          queueEntryId: { type: 'string', format: 'uuid' },
+          patientId: { type: 'string', format: 'uuid' },
         },
       },
     },

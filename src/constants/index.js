@@ -36,6 +36,11 @@ export const InvoiceStatus = {
   PAID: 'Paid',
 };
 
+export const ConsultationStatus = {
+  IN_PROGRESS: 'in_progress',
+  COMPLETED: 'completed',
+};
+
 export const StaffStatus = {
   INVITED: 'invited',
   ACTIVE: 'active',
