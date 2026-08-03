@@ -9,6 +9,7 @@ import defineVitals from "./vitals.js";
 import defineConsultation from "./consultation.js";
 import definePrescription from "./prescription.js";
 import defineInvoice from "./invoice.js";
+import definePayment from "./payment.js";
 
 const Patient = definePatient(sequelize);
 const Clinic = defineClinic(sequelize);
@@ -20,6 +21,7 @@ const Vitals = defineVitals(sequelize);
 const Consultation = defineConsultation(sequelize);
 const Prescription = definePrescription(sequelize);
 const Invoice = defineInvoice(sequelize);
+const Payment = definePayment(sequelize);
 
 const db = {
   Patient,
@@ -32,6 +34,7 @@ const db = {
   Consultation,
   Prescription,
   Invoice,
+  Payment,
 };
 
 Object.values(db).forEach((model) => {

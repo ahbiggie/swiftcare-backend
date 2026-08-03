@@ -4,7 +4,7 @@ Why the repo looks the way it does. One entry per decision that wasn't obvious, 
 
 The locked API surface lives in [API_CONTRACT.md](API_CONTRACT.md). This file records **implementation** decisions, not contract ones. A change here is a PR. A change to the contract is a PR _there_, first.
 
-**Started:** 2026-07-21 · **Phase:** lane work in progress — Auth and Queue live, Patients/Appointments/Check-in live, documentation live
+**Started:** 2026-07-21 · **Phase:** every `MUST`-priority route in the contract is live — Auth, Patients, Appointments, Queue, Vitals, Consultations, and now Billing & Payments (Lane 4, the last lane). Only the `DEFER`-priority section 8 (Dashboard & admin) remains.
 
 ---
 
@@ -295,6 +295,26 @@ Six pieces of work (the four Patients routes, Appointments, and Queue check-in) 
 
 **Lesson for next time a chain of branches is built this way:** either merge starting from the newest branch and work down to the oldest, so each merge carries everything above it along too, or skip merging the middle branches into each other at all, and only ever open the one pull request that matters — the finished, final branch straight into `main` — once every piece in the chain is done.
 
+### D18 · Billing & payments (section 7): the last lane, closed against an already-accurate contract
+
+`Payment` model + migration, `GET /invoices/:patientId`, `POST /payments`, `GET /payments/history`. Unlike D11/D15, the contract's section 7 was already fully specified — request/response shapes, both error codes, the worked example's exact JSON — so this landed with **no contract PR**, only the code to match it. Several decisions came out of matching it correctly.
+
+**Lock the invoice row before checking whether it's paid, not after.** `createPayment` runs `Invoice.findByPk(invoiceId, { lock: t.LOCK.UPDATE })` and only then reads `invoice.status`. Checking status first and locking second would leave a real window: two simultaneous payment requests could both read `Pending` before either lock lands, both pass the check, and both write a `Payment` row against one invoice. Lock-then-check closes it completely — the second request's lock acquisition blocks until the first transaction commits, so by the time it's actually allowed to look, it necessarily sees `Paid`. Same discipline as [D13](#d13--invite-tokens-clearing-on-accept-collapses-two-error-cases-into-one)'s accept-invite lock and [D5](#d5--queue-transition-table-is-data-the-guard-is-a-stub)'s original concurrency note: the caller re-reads the row inside a transaction and compares state immediately before writing, every time, not just once. Verified with the same standard as the atomicity test in consultation-complete (D-adjacent): a second `POST /payments` against an already-paid invoice returns `409 INVOICE_ALREADY_PAID` with exactly one `Payment` row surviving, not inferred from the lock existing in the code.
+
+**`PAYMENT_NOT_DUE` is checked explicitly, rather than left to fall through into `changeStatus`'s `QUEUE_ILLEGAL_TRANSITION`.** Both are technically true when a queue entry isn't at `Awaiting Payment`, but they're not the same *kind* of true — one names the actual billing failure the contract defines, the other is generic queue-transition language a cashier's UI has no code path for. `createPayment` locks the queue entry and checks `status !== AWAITING_PAYMENT` itself, before calling `changeStatus`, so the specific contract-named code surfaces instead of a fallback that happens to also be correct. Same ordering principle as [D8](#d8--queue-cancellation-a-terminal-status-note-required-admin-included): report the failure that actually describes what went wrong.
+
+**`changeStatus` imported directly for the third time** — queue routes, `completeConsultation` (In Consultation → Awaiting Payment, doctor-owned), and now `createPayment` (Awaiting Payment → Completed, cashier-owned). [Q2](#q2--queue-state-machine-imported-module-or-internal-http-call)'s reading (a shared module, not an internal HTTP call) has now been exercised by every lane that advances the queue automatically, not just the one it was first written for. The lock and the `QueueStatusEvent` write live inside that one function; `createPayment` locks the queue entry itself only to read its status ahead of `changeStatus`'s own re-lock of the same row in the same transaction, which is a no-op re-affirmation, not a second implementation of the transition.
+
+**`amount` is never accepted from the request body.** `POST /payments`' body is `{ invoiceId, method }` only, per contract; `createPayment` reads `invoice.totalAmount` and copies it onto the `Payment` row. Same discipline as `CONSULTATION_FEE` in `completeConsultation` — a caller-supplied price for a billing action is a caller-supplied way to underpay.
+
+**`GET /invoices/:patientId?queueEntryId=` resolves the join through `Consultation`, because `Invoice` doesn't carry `queueEntryId` directly.** An invoice is keyed to the consultation that produced it (`consultationId`, unique), and a consultation is keyed to the visit (`queueEntryId`). Narrowing by visit means finding the matching `Consultation` first and filtering invoices by its id — the same shape `getConsultationsForPatient` already uses to narrow by `queueEntryId`, one join further out.
+
+**Cross-clinic invoice lookups collapse to `404`, same rule as every other lookup in the system.** `invoice.clinicId !== clinicId` is checked immediately after the lock, before the paid check, before any write — a cashier in one clinic supplying another clinic's real `invoiceId` gets `404 NOT_FOUND` and nothing downstream runs. Same rule D10/D15 already state for consultations, queue entries, patients, and doctors: missing and belongs-to-another-clinic must be indistinguishable from the outside.
+
+**The clinic-isolation claim on `GET /payments/history` needed its own kind of proof, not the same kind as the id-probing tests.** Every other cross-clinic test in this codebase (D10's queue test, consultation-complete's "different doctor"/"another clinic" cases, this lane's own "another clinic cannot pay this invoice") answers "can a caller reach a specific foreign id" — there's an id in the request to probe. A list endpoint takes no id, so that test shape doesn't apply to it; the real question is "if data exists across multiple clinics, does the query only ever return the caller's own slice." Confirming that needed an actual cross-tenant row, not a fabricated foreign `clinicId` in a token. The test seeds a second real `Clinic` with its own staff, patient, visit, invoice, and paid `Payment`, then asserts each clinic's `/payments/history` includes its own payment and excludes the other's, both directions — proof the `where: { clinicId }` filter (never widened by any query param) actually holds, not an inference from reading the query.
+
+**Q3 was resolved before this lane started, but never closed out here — closed now.** See [Q3](#q3--where-does-the-flat-consultation-fee-come-from) below.
+
 ---
 
 ## Shared code
@@ -399,9 +419,13 @@ The contract defines an active visit as "any status except `Completed`/`Cancelle
 
 The contract says the queue is "shared; called by every lane" without specifying the mechanism. The scaffold assumes a directly imported module (`services/queue/transitions.js`), which is the simpler reading, but this was never explicitly confirmed, and it changes how every other lane calls into the queue. Raised during setup; still unanswered.
 
+**Resolved, in practice rather than in a single explicit ruling:** the module-import reading. D10 adopted it as the reading to build against; every automatic queue transition since has followed it — `completeConsultation` (Lane 3) and now `createPayment` (Lane 4, see [D18](#d18--billing--payments-section-7-the-last-lane-closed-against-an-already-accurate-contract)) both import `changeStatus` from `services/queue/queue.service.js` directly rather than making an internal HTTP call. Three separate consumers landing on the same shared function, none of them reimplementing the lock or the event write, is the actual confirmation this question was waiting on.
+
 ### Q3 · Where does the flat consultation fee come from?
 
 `POST /consultations/:id/complete` creates an invoice at a "flat fee". Not specified whether that's a constant, a per-clinic setting, or a config value. Lane 3 and Lane 4 both need the answer, and it likely implies a column on the clinic record, which means it belongs in the schema work.
+
+**Resolved:** a flat, shared constant — `CONSULTATION_FEE` in `constants/index.js`, not a per-clinic column or config value. Recorded there as the decision at the time (Lane 3), but never closed out here until Lane 4 (D18) needed the same answer and went looking for where it had been settled. Revisit if the contract ever calls for per-clinic pricing; until then, `completeConsultation` and nothing else is the one place that reads it.
 
 ### Q4 · Shared-utils module layout
 
@@ -419,12 +443,13 @@ Each of these is a deliberate "not yet". The last column says what would make us
 
 | Deferred                                 | Why                                                                                       | Revisit when                                                                                                       |
 | ---------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Vitals, Consultation, Prescription, Invoice, Payment models (5 remaining) | Schema is the critical path for Lanes 3 and 4 | Lane 3 / Lane 4 start |
+| Vitals, Consultation, Prescription, Invoice, Payment models (5 remaining) | ~~Schema is the critical path for Lanes 3 and 4~~ **Done — all five models built and migrated, see [D18](#d18--billing--payments-section-7-the-last-lane-closed-against-an-already-accurate-contract) for the last two.** | Nothing left |
 | Appointment double-booking guard         | Real design question (unique index vs. overlap check) the contract doesn't mandate for v1 | Before appointments carries real scheduling weight; see [D11](#d11--appointment-resolved-and-merged-in-victors-absence) |
 | `assertCanTransition` implementation     | ~~Lane 1's work, not the scaffold's~~ **Done, see [D8](#d8--queue-cancellation-a-terminal-status-note-required-admin-included).** | Nothing left |
 | Concurrent-duplicate lock, phone (patients) and email (staff) | Post-MVP for phone per the contract; accepted the same way for email in D12; see [Q5](#q5--should-registering-two-patients-with-the-same-new-phone-number-at-the-same-moment-be-locked) | Real concurrent load |
-| Automated tests for Patients / Appointments / Queue check-in | Built under time pressure to unblock the rest of the project; no matching tests written alongside it | Before this code is trusted for real traffic — same style as `tests/queue-routes.test.js` |
+| Automated tests for Patients / Appointments / Queue check-in, Vitals, and consultation open/list (only consultation-*complete* and all of Billing & Payments have dedicated route tests) | Built under time pressure to unblock the rest of the project; no matching tests written alongside it | Before this code is trusted for real traffic — same style as `tests/payment-routes.test.js` |
 | Linting                                  | An `eslint-disable` comment already exists with no ESLint; mild inconsistency, accepted  | Team agrees on a style                                                                                             |
-| CI                                       | ~~Nothing to run without tests~~ **Tests now exist — 64 of them.** Nothing runs them automatically yet | Now — this is the next natural step, not blocked on anything |
+| CI                                       | ~~Nothing to run without tests~~ **Tests now exist — 82 of them.** Nothing runs them automatically yet | Now — this is the next natural step, not blocked on anything |
 | `CONTRIBUTING.md` + PR template          | Branch naming and PR expectations currently live only in the README                       | Before lanes branch                                                                                                |
 | CORS (Lane 1 / `app.js`)                 | ~~Not in `app.js` today~~ **Done, see [D9](#d9--cors-env-driven-allow-list-rejection-routed-through-apierror).** Env-driven allow-list, `403 FORBIDDEN_ORIGIN`, now in the contract's Conventions | Nothing left |
+| Dashboard & admin (contract section 8: `GET /dashboard`, `GET /audit-logs`) | Contract marks both `DEFER`, not `MUST` — the only section left unbuilt now that section 7 (D18) is done | If the contract's priority on either route changes |
