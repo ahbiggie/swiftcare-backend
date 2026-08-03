@@ -3,24 +3,15 @@ import cors from 'cors';
 import swaggerUi from 'swagger-ui-express';
 import routes from './routes/index.js';
 import errorHandler from './middlewares/errorHandler.js';
-import ApiError from './utils/ApiError.js';
-import { ErrorCode } from './constants/index.js';
 import swaggerSpec from './config/swagger.js';
 
 const app = express();
 
-const allowedOrigins = (process.env.CORS_ORIGIN || '')
-    .split(',')
-    .map((o) => o.trim())
-    .filter(Boolean);
-
-app.use(cors({
-    origin(origin, callback) {
-        // No Origin header
-        if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
-        return callback(new ApiError(403, ErrorCode.FORBIDDEN_ORIGIN, `Origin ${origin} is not allowed`));
-    },
-}));
+// TEMPORARY: frontend asked to allow all origins while their dev/deploy
+// URL is in flux. Reflects the request's Origin rather than a bare "*"
+// so this stays compatible if credentialed requests are ever added later.
+// REVERT to the CORS_ORIGIN allowlist once frontend has a stable origin — see DECISIONS.md.
+app.use(cors({ origin: true }));
 
 app.use(express.json());
 

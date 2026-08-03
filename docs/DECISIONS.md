@@ -295,6 +295,20 @@ Six pieces of work (the four Patients routes, Appointments, and Queue check-in) 
 
 **Lesson for next time a chain of branches is built this way:** either merge starting from the newest branch and work down to the oldest, so each merge carries everything above it along too, or skip merging the middle branches into each other at all, and only ever open the one pull request that matters — the finished, final branch straight into `main` — once every piece in the chain is done.
 
+### D18 · CORS temporarily opened to all origins, at frontend's request
+
+`app.js` went from an env-driven allow-list ([D9](#d9--cors-env-driven-allow-list-rejection-routed-through-apierror)) to `cors({ origin: true })` — every origin is now let through, not just the ones in `CORS_ORIGIN`.
+
+**Why:** frontend's dev/deploy URL isn't stable yet, and the allow-list was rejecting them with `403 FORBIDDEN_ORIGIN` before they had a fixed origin to add to it. This is explicitly **temporary**, not a reversal of D9's reasoning — the allow-list is still the right design once there's a real origin to put in it.
+
+**`origin: true`, not a bare `"*"`.** Functionally identical for what the frontend needs right now — every origin gets through either way — but `"*"` and `Access-Control-Allow-Credentials: true` cannot coexist per the CORS spec, while a reflected origin can. Costs nothing today and avoids a second migration if credentialed requests (cookies, `withCredentials`) ever get introduced later. Verified directly, not just configured and assumed: `tests/cors.test.js` asserts the `Access-Control-Allow-Origin` response header equals the actual request `Origin`, not `*`.
+
+**Low risk despite being wide open, because of what this API's auth already is.** Every route but the three public auth ones requires a Bearer token in an `Authorization` header, which a browser never attaches automatically the way it does cookies. Opening CORS doesn't hand a malicious site a signed-in user's session — it only means a browser script can *attempt* a request, which still needs a token it has no way to obtain. CORS was never the access-control layer here ([D9](#d9--cors-env-driven-allow-list-rejection-routed-through-apierror) already says this); this decision is safe largely because that was already true before it.
+
+**What changed in the test suite, and why it was edited rather than left to fail.** `tests/cors.test.js`'s `a disallowed origin is 403 FORBIDDEN_ORIGIN` test asserted exactly the behavior this decision removes on purpose. Deleting the assertion silently would have left the pass count meaning less than it says; instead the test was rewritten to assert the new contract — any origin gets through, and the allow-origin header reflects the real origin rather than `*` — so a future regression back to the old restrictive behavior would fail a test, the same way a regression forward would have before this change. Full suite: `72/72` passing. `ApiError`/`ErrorCode` imports in `app.js` were dropped since `origin: true` has no rejection path left to use them on; `ErrorCode.FORBIDDEN_ORIGIN` itself stays in the catalog rather than being deleted, since the code is still contract-documented (D9) and reverting shouldn't mean re-adding it.
+
+**Revert trigger:** once frontend has a stable origin, put it in `CORS_ORIGIN` and restore the D9 allow-list callback in `app.js` — the `allowedOrigins` parsing logic was removed along with the callback, not left commented out, so restoring it means pulling the D9 version back rather than un-commenting stale code.
+
 ---
 
 ## Shared code
@@ -427,4 +441,4 @@ Each of these is a deliberate "not yet". The last column says what would make us
 | Linting                                  | An `eslint-disable` comment already exists with no ESLint; mild inconsistency, accepted  | Team agrees on a style                                                                                             |
 | CI                                       | ~~Nothing to run without tests~~ **Tests now exist — 64 of them.** Nothing runs them automatically yet | Now — this is the next natural step, not blocked on anything |
 | `CONTRIBUTING.md` + PR template          | Branch naming and PR expectations currently live only in the README                       | Before lanes branch                                                                                                |
-| CORS (Lane 1 / `app.js`)                 | ~~Not in `app.js` today~~ **Done, see [D9](#d9--cors-env-driven-allow-list-rejection-routed-through-apierror).** Env-driven allow-list, `403 FORBIDDEN_ORIGIN`, now in the contract's Conventions | Nothing left |
+| CORS allow-list restored (`app.js`)      | Temporarily reopened to all origins ([D18](#d18--cors-temporarily-opened-to-all-origins-at-frontends-request)) at frontend's request while their deploy URL is unstable — the [D9](#d9--cors-env-driven-allow-list-rejection-routed-through-apierror) allow-list itself isn't wrong, just paused | Once frontend has a stable origin to put in `CORS_ORIGIN` |
