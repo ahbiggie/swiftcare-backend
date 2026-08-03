@@ -164,17 +164,19 @@ The system is live, not just running on a laptop. The backend (this code) is hos
 - **Keep patient records.** A receptionist can search for a patient, look up one patient's full details, register a brand-new patient, and edit a patient's details. If someone tries to register a patient whose phone number already exists in the clinic, the system flags it as a possible duplicate instead of quietly creating a second record for the same person.
 - **Book appointments.** A receptionist can schedule a future visit for a patient with a specific doctor.
 - **Run the live visit queue.** A receptionist can check a patient in, which starts a real, trackable visit. From there, the visit moves step by step — nurse triage, waiting for the doctor, in consultation, waiting for payment, done — and every move is written down: who made it, when, and why. The system won't allow a visit to skip a step, and it won't allow the same patient to be checked in twice at once.
-- **Keep every clinic's information separate.** No clinic can ever see or change another clinic's patients, staff, or visits.
+- **Record vitals during a visit.** A nurse can record a patient's blood pressure, temperature, and weight against their current visit.
+- **Run the consultation.** A doctor can open a consultation once a visit reaches them, write notes and a diagnosis, and add prescriptions. Completing it generates the invoice for that visit in the same step and moves the visit on to waiting for payment.
+- **Take payment and close the visit.** A cashier can look up a patient's invoices, then take payment against one. The amount comes from the invoice itself, never from the request — the system refuses a second payment on an already-paid invoice, and refuses payment on a visit that hasn't actually reached that point in the queue yet. A successful payment is what finally moves the visit to done.
+- **Keep every clinic's information separate.** No clinic can ever see or change another clinic's patients, staff, visits, invoices, or payments.
 - **Show its own documentation.** Everything the system can currently do is written up on a documentation page built into the system itself, which can also be used to try each action directly, rather than only being described in a text file.
 
 ### Checked and working
 
-64 automated checks run against the system, and all of them currently pass — covering logging in, managing staff, the visit queue rules, and making sure clinics can't see each other's information.
+82 automated checks run against the system, and all of them currently pass — covering logging in, managing staff, the visit queue rules, completing a consultation (notes, prescriptions, and the invoice it creates), taking payment (including blocking a second payment on the same invoice and payment on a visit that isn't due for it yet), and making sure one clinic can never see or act on another's information.
+
+Vitals, and the parts of consultations other than completing one (opening one, listing a patient's history), are live and reachable the same way as everything above, but don't yet have their own automated checks — see `DECISIONS.md`'s deferred-items table.
 
 ### Not built yet
 
-- **Recording a patient's vitals** (blood pressure, temperature, weight) when a nurse sees them.
-- **Running the consultation** — the doctor's notes, diagnosis, and prescription, and the bill that gets created from it.
-- **Taking payment** and keeping a record of it.
-- **A summary screen for admins**, showing things like how many patients, how much money has come in, and where visits are getting stuck.
+- **A summary screen for admins**, showing things like how many patients, how much money has come in, and where visits are getting stuck. The contract marks this one `DEFER`, not `MUST` — it was never in scope for this phase.
 - **Stopping the same doctor being double-booked** at the same time — left out on purpose for now. The reasoning is written up in `DECISIONS.md`.

@@ -5,6 +5,8 @@ import queueRoutes from "./queue.routes.js";
 import appointmentRoutes from "./appointment.routes.js";
 import vitalsRoutes from "./vitals.routes.js";
 import consultationRoutes from "./consultation.routes.js";
+import invoiceRoutes from "./invoice.routes.js";
+import paymentRoutes from "./payment.routes.js";
 import auth from "../middlewares/auth.js";
 import authorize from "../middlewares/authorize.js";
 import { Role } from "../constants/index.js";
@@ -43,6 +45,8 @@ router.use("/auth", authRoutes);
 router.use("/appointments", appointmentRoutes);
 router.use("/vitals", vitalsRoutes);
 router.use("/consultations", consultationRoutes);
+router.use("/invoices", invoiceRoutes);
+router.use("/payments", paymentRoutes);
 
 // Contract lists these under "Auth & Accounts" (section 1), but their actual
 // paths have no /auth prefix — top-level, wired here rather than inside
@@ -119,9 +123,5 @@ router.get(
   authorize(Role.RECEPTIONIST, Role.NURSE, Role.ADMIN),
   getDoctors,
 );
-
-// Lane owners: register yours here.
-//   Lane 4 (Emmanuel Dosumu) — router.use('/invoices', invoiceRoutes); router.use('/payments', paymentRoutes);
-// Don't forget the .js extension on the import.
 
 export default router;
