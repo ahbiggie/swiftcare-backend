@@ -309,6 +309,14 @@ Six pieces of work (the four Patients routes, Appointments, and Queue check-in) 
 
 **Revert trigger:** once frontend has a stable origin, put it in `CORS_ORIGIN` and restore the D9 allow-list callback in `app.js` — the `allowedOrigins` parsing logic was removed along with the callback, not left commented out, so restoring it means pulling the D9 version back rather than un-commenting stale code.
 
+### D19 · CORS: revert trigger fired, back to the D9 allow-list
+
+Frontend's deploy URL is now stable (`https://swiftcare-eight.vercel.app`), so the [D18](#d18--cors-temporarily-opened-to-all-origins-at-frontends-request) revert trigger fired. `app.js` goes back to the [D9](#d9--cors-env-driven-allow-list-rejection-routed-through-apierror) `allowedOrigins` callback (`ApiError`/`ErrorCode.FORBIDDEN_ORIGIN` imports restored, `origin: true` removed), and `CORS_ORIGIN` in `.env` / `.env.example` is set to `http://localhost:5173,https://swiftcare-eight.vercel.app`.
+
+**`tests/cors.test.js` goes back to the D9 version too**, asserting the allow-list contract (allowed origin → 200, disallowed → 403 `FORBIDDEN_ORIGIN`, no-Origin → 200) instead of D18's "any origin gets through" assertions — the same reasoning D18 itself used: a regression either direction should fail a test, not just change silently.
+
+**Nothing else changes.** D18's low-risk argument (every non-public route needs a Bearer token a browser never attaches automatically) was about CORS exposure, not about which origins are let through, so it isn't affected by tightening the list back up.
+
 ---
 
 ## Shared code
@@ -441,4 +449,3 @@ Each of these is a deliberate "not yet". The last column says what would make us
 | Linting                                  | An `eslint-disable` comment already exists with no ESLint; mild inconsistency, accepted  | Team agrees on a style                                                                                             |
 | CI                                       | ~~Nothing to run without tests~~ **Tests now exist — 64 of them.** Nothing runs them automatically yet | Now — this is the next natural step, not blocked on anything |
 | `CONTRIBUTING.md` + PR template          | Branch naming and PR expectations currently live only in the README                       | Before lanes branch                                                                                                |
-| CORS allow-list restored (`app.js`)      | Temporarily reopened to all origins ([D18](#d18--cors-temporarily-opened-to-all-origins-at-frontends-request)) at frontend's request while their deploy URL is unstable — the [D9](#d9--cors-env-driven-allow-list-rejection-routed-through-apierror) allow-list itself isn't wrong, just paused | Once frontend has a stable origin to put in `CORS_ORIGIN` |

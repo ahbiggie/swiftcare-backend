@@ -1,7 +1,9 @@
-// CORS currently reflects the request's Origin rather than restricting to
-// the CORS_ORIGIN allow-list. TEMPORARY — see DECISIONS.md for why and the
-// trigger to revert. Boots the real app and drives it over HTTP so the full
-// path is exercised, via node --test (zero deps).
+// CORS origin allow-list, via node --test (zero deps — see DECISIONS "Tests").
+// Boots the real app and drives it over HTTP so the full path is exercised:
+// cors origin callback -> next(err) -> errorHandler -> the contract envelope.
+//
+// CORS_ORIGIN is read once at app-module load, so it must be set before the
+// dynamic import below — hence the import inside the test rather than at top.
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,6 +13,7 @@ let server;
 let baseUrl;
 
 before(async () => {
+  process.env.CORS_ORIGIN = 'http://localhost:5173,https://swiftcare-eight.vercel.app';
   ({ default: app } = await import('../src/app.js'));
   server = app.listen(0);
   await new Promise((resolve) => server.once('listening', resolve));
@@ -27,23 +30,20 @@ async function hit(origin) {
     headers: origin ? { Origin: origin } : {},
   });
   const body = await res.json().catch(() => null);
-  return { status: res.status, body, allowOriginHeader: res.headers.get('access-control-allow-origin') };
+  return { status: res.status, body };
 }
 
-test('any origin gets through, including one that would have failed the old allow-list', async () => {
-  const { status, body } = await hit('https://not-on-any-allowlist.example');
+test('an allowed origin gets through', async () => {
+  const { status, body } = await hit('https://swiftcare-eight.vercel.app');
   assert.equal(status, 200);
   assert.equal(body.success, true);
 });
 
-test('the response reflects the actual request origin, not a bare "*"', async () => {
-  // The reason for `origin: true` over a bare wildcard: "*" and
-  // Access-Control-Allow-Credentials: true can't coexist, so reflecting the
-  // real origin keeps this compatible if credentialed requests are ever
-  // introduced later. Verified directly against the response header, not
-  // just inferred from the config.
-  const { allowOriginHeader } = await hit('https://reflect-me.example');
-  assert.equal(allowOriginHeader, 'https://reflect-me.example');
+test('a disallowed origin is 403 FORBIDDEN_ORIGIN in the contract envelope', async () => {
+  const { status, body } = await hit('https://evil.example');
+  assert.equal(status, 403); // an access decision, not a 500 server fault
+  assert.equal(body.success, false);
+  assert.equal(body.error.code, 'FORBIDDEN_ORIGIN');
 });
 
 test('no Origin header (server-to-server / curl / health check) is not blocked', async () => {
