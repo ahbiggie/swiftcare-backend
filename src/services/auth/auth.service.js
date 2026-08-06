@@ -5,6 +5,7 @@ import { ErrorCode, Role, StaffStatus } from '../../constants/index.js';
 import { signClinicToken, signStaffToken } from '../../utils/jwt.js';
 import { isUuid } from '../../utils/uuid.js';
 import { INVITABLE_ROLES } from '../../models/staff.js';
+import { sendInviteEmail } from '../../utils/email.js';
 
 const { Clinic, Staff, sequelize } = db;
 
@@ -198,9 +199,21 @@ export async function inviteStaff({ name, email, role, clinicId }) {
     throw err;
   }
 
+  const inviteLink = `${FRONTEND_URL}/accept-invite?token=${inviteToken}`;
+
+  // Additive only (D20): the manual-copy-the-link fallback above must keep
+  // working on its own, so a failed send is logged and swallowed, never
+  // rethrown — an admin's invite must never fail because the mail relay did.
+  try {
+    const clinic = await Clinic.findByPk(clinicId);
+    await sendInviteEmail(email, name, clinic?.name, inviteLink);
+  } catch (err) {
+    console.error('Failed to send invite email:', err);
+  }
+
   return {
     ...publicStaff(staff),
-    inviteLink: `${FRONTEND_URL}/accept-invite?token=${inviteToken}`,
+    inviteLink,
   };
 }
 

@@ -9,6 +9,11 @@ import jwt from 'jsonwebtoken';
 
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
 process.env.CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173';
+// Nothing listens on 127.0.0.1:1, so every invite's email send fails fast
+// (ECONNREFUSED) instead of trying the real SendGrid relay. These tests don't
+// care about email delivery — see auth-invite-email.test.js for that.
+process.env.EMAIL_HOST = process.env.EMAIL_HOST || '127.0.0.1';
+process.env.EMAIL_PORT = process.env.EMAIL_PORT || '1';
 
 let app;
 let db;

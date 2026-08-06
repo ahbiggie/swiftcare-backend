@@ -317,6 +317,20 @@ Frontend's deploy URL is now stable (`https://swiftcare-eight.vercel.app`), so t
 
 **Nothing else changes.** D18's low-risk argument (every non-public route needs a Bearer token a browser never attaches automatically) was about CORS exposure, not about which origins are let through, so it isn't affected by tightening the list back up.
 
+### D20 · Invite emails, via Nodemailer over SendGrid's SMTP relay — additive, never blocking
+
+`inviteStaff` (`auth.service.js`) now sends the invited staff member an email carrying their `inviteLink`, on top of the manual-copy flow the contract already had (admin reads the link back out of the API response and passes it along however they like).
+
+**Why Nodemailer + plain SMTP, not a SendGrid SDK.** SendGrid exposes a normal SMTP relay (`smtp.sendgrid.net:587`), so a generic SMTP client is enough — no need for `@sendgrid/mail` or its own transport package. `src/utils/email.js` builds one reusable `nodemailer` transporter from `EMAIL_HOST`/`EMAIL_PORT`/`SENDGRID_API_KEY`/`EMAIL_FROM`. The SMTP username is always the literal string `apikey` for SendGrid specifically — that's not a per-account value, so it's hardcoded as a constant in `email.js` rather than another env var pretending to be configurable.
+
+**Sending is additive and must never be able to fail the invite — the single most important rule here.** `inviteStaff` calls `sendInviteEmail` inside its own `try`/`catch`; a thrown error (bad credentials, unreachable relay, whatever) is logged with `console.error` and swallowed, never rethrown. The function still returns `{ ...staff, inviteLink }` exactly as before email delivery existed. The manual-copy fallback is not a fallback in the sense of "kicks in if email fails" — it's the same return value either way, unconditionally; email is strictly additive on top of it. Proven with a real send failure, not a stub: `tests/auth-invite-email.test.js` points `EMAIL_HOST`/`EMAIL_PORT` at a closed local port (`127.0.0.1:1`, guaranteed ECONNREFUSED, no real network dependency) and asserts `POST /auth/invite` still returns `201` with a working `inviteLink`, and that the `Staff` row and its `inviteToken` really exist. `tests/auth-invite.test.js`'s existing invite tests point at the same closed port for the same reason — they test invite mechanics, not email, and shouldn't depend on or wait on a real SMTP attempt.
+
+**Transporter has short timeouts (`connectionTimeout`/`greetingTimeout`/`socketTimeout`, 10s each), which nodemailer doesn't set by default (its defaults run to minutes).** Given the rule above, an unbounded hang isn't a correctness risk — the `try`/`catch` still lets the request through eventually — but it would mean a slow or unreachable relay stalls every invite response for minutes at a time, which is its own kind of failure even though the invite technically still succeeds.
+
+**No automated test proves an email actually arrives — that's out of scope for the suite, and covered manually instead.** Confirming real delivery means a real `POST /auth/invite` against a real SendGrid account and a real inbox, once credentials exist; not something to automate reliably in CI.
+
+**`EMAIL_HOST`, `EMAIL_PORT`, `SENDGRID_API_KEY`, `EMAIL_FROM` need setting in *two* places, not one: the local `.env` (already done here with placeholders in `.env.example`) *and* Railway's Variables tab for the deployed API.** Flagging this explicitly because it's exactly the mistake that happened with `CORS_ORIGIN` earlier in this project (D18/D19) — a var set locally but never added to Railway, so the deployed behavior silently diverges from local until someone notices. Until the Railway vars are set, `SENDGRID_API_KEY` is empty in production, every send fails the SMTP auth step, and — per the rule above — that's caught and logged, not visible as an error to the admin. That's the intended fallback behavior, not a bug, but it does mean "the feature looks broken in prod" won't throw a loud error; check the server logs for `Failed to send invite email:` first.
+
 ---
 
 ## Shared code
