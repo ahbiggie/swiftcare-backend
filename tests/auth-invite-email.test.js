@@ -1,6 +1,6 @@
 // Proves the one rule that matters most for D20: a failed invite email must
-// never fail the invite itself. EMAIL_HOST/PORT point at a closed local port
-// (127.0.0.1:1, nothing listens there), so every send fails fast with
+// never fail the invite itself. SENDGRID_API_URL points at a closed local
+// port (127.0.0.1:1, nothing listens there), so every send fails fast with
 // ECONNREFUSED — a real send failure, not a stubbed-out call — and
 // POST /auth/invite must still come back 201 with a working inviteLink, same
 // as the manual-copy fallback that worked before email delivery existed.
@@ -11,8 +11,7 @@ import jwt from 'jsonwebtoken';
 
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
 process.env.CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173';
-process.env.EMAIL_HOST = '127.0.0.1';
-process.env.EMAIL_PORT = '1';
+process.env.SENDGRID_API_URL = 'http://127.0.0.1:1';
 process.env.SENDGRID_API_KEY = 'not-a-real-key';
 process.env.EMAIL_FROM = 'no-reply@test.example';
 

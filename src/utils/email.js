@@ -1,29 +1,44 @@
-import nodemailer from 'nodemailer';
-
-// SendGrid's SMTP relay always authenticates with this literal username,
-// regardless of account — the real credential is the API key (the password).
-const SMTP_USERNAME = 'apikey';
-
-// Built once at module load and reused for every send, same as the DB pool.
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST || 'smtp.sendgrid.net',
-  port: Number(process.env.EMAIL_PORT) || 587,
-  auth: {
-    user: SMTP_USERNAME,
-    pass: process.env.SENDGRID_API_KEY,
-  },
-  // Bounded so a slow or unreachable relay can't stall the request that
-  // triggered the send for nodemailer's much longer defaults (see D20).
-  connectionTimeout: 10000,
-  greetingTimeout: 10000,
-  socketTimeout: 10000,
-});
+// HTTPS Web API instead of the SMTP relay this used to go through (D20
+// update): Railway — and PaaS hosts generally — block outbound SMTP, so the
+// SMTP transport connection just times out there even though it works
+// locally. This call rides on port 443 like any other outbound HTTPS
+// request, which isn't blocked.
+const SENDGRID_API_URL = process.env.SENDGRID_API_URL || 'https://api.sendgrid.com/v3/mail/send';
 
 export async function sendInviteEmail(toEmail, staffName, clinicName, inviteLink) {
-  await transporter.sendMail({
-    from: process.env.EMAIL_FROM,
-    to: toEmail,
-    subject: `You've been invited to join ${clinicName} on SwiftCare`,
-    text: `Hi ${staffName},\n\nYou've been invited to join ${clinicName} on SwiftCare. Set your password to activate your account:\n${inviteLink}\n\nIf you weren't expecting this invite, you can ignore this email.`,
-  });
+  const controller = new AbortController();
+  // Same bounded-wait rationale as the old transporter's connectionTimeout:
+  // the try/catch around this call lets the request through either way, but
+  // an unbounded hang would still stall the response for minutes.
+  const timeout = setTimeout(() => controller.abort(), 10000);
+
+  let res;
+  try {
+    res = await fetch(SENDGRID_API_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.SENDGRID_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        personalizations: [{ to: [{ email: toEmail }] }],
+        from: { email: process.env.EMAIL_FROM },
+        subject: `You've been invited to join ${clinicName} on SwiftCare`,
+        content: [
+          {
+            type: 'text/plain',
+            value: `Hi ${staffName},\n\nYou've been invited to join ${clinicName} on SwiftCare. Set your password to activate your account:\n${inviteLink}\n\nIf you weren't expecting this invite, you can ignore this email.`,
+          },
+        ],
+      }),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`SendGrid API responded ${res.status}: ${body}`);
+  }
 }
